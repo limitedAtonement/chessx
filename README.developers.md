@@ -49,7 +49,7 @@ Here are some examples:
 
 and verify that your class is documented correctly.
 
-### 4. Format your code with tabs
+### 4. Automatic Formatting
 
 We advocate using [astyle](http://astyle.sourceforge.net) to indent your code. To use astyle, put
 
