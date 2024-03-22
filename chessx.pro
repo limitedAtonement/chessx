@@ -1,6 +1,6 @@
 # Main application
 DEFINES += QT_DEPRECATED_WARNINGS
-CONFIG += uic warn_on sdk_no_version_check
+CONFIG += uic warn_on sdk_no_version_check debug
 QT += network svg
 
 TEMPLATE = app
@@ -245,6 +245,7 @@ HEADERS += src/database/board.h \
   src/database/tagsearch.h \
   src/database/telnetclient.h \
   src/database/threadedguess.h \
+  src/database/training.h \
   src/database/uciengine.h \
   src/database/version.h \
   src/database/wbengine.h \
@@ -424,6 +425,7 @@ SOURCES += \
   src/database/tagsearch.cpp \
   src/database/telnetclient.cpp \
   src/database/threadedguess.cpp \
+  src/database/training.cpp \
   src/database/uciengine.cpp \
   src/database/wbengine.cpp \
   src/dialogs/aboutdlg.cpp \
@@ -541,12 +543,14 @@ MOC_DIR = src/generated
 RCC_DIR = src/generated
 
 CONFIG(debug, debug|release) {
+message("debug mode")
   DESTDIR = "debug"
   OBJECTS_DIR = "obj_dbg"
   DEFINES += _DEBUG
 }
 
 CONFIG(release, debug|release) {
+message("release mode")
   DESTDIR = "release"
   OBJECTS_DIR = "obj_rel"
   DEFINES += QT_NO_DEBUG_OUTPUT NDEBUG

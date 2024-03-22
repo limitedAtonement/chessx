@@ -24,6 +24,7 @@
 #include <QSoundEffect>
 #include <QToolBar>
 #include <QUndoGroup>
+#include "training.h"
 
 using namespace chessx;
 
@@ -780,6 +781,7 @@ private:
     Move m_readNextMove;
     QPointer<QSoundEffect> effect;
     QMap<QUrl, QString> copyFileNames;
+    Training training;
 };
 
 #endif

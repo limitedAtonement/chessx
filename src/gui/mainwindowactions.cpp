@@ -964,6 +964,10 @@ void MainWindow::doBoardMove(Move m, unsigned int button, Square from, Square to
                 promotionPiece = pieceType(m.promotedPiece());
             }
 
+            if (m_training->isChecked())
+            {
+                //std::cout << "TRAIN!\n";
+            }
             // Use an existing move with the correct promotion piece type if it already exists
             if(game().findNextMove(from, to, promotionPiece))
             {
@@ -2201,6 +2205,10 @@ bool MainWindow::autoRespondActive() const
 
 void MainWindow::slotToggleTraining()
 {
+    // Training data are stored in the database. If there
+    // is no current database, we have no training data.
+    if (!m_currentDatabase)
+        return;
     QAction* action = qobject_cast<QAction*>(sender());
     if (AppSettings->getValue("/Board/noHints").toBool())
     {    
@@ -2208,6 +2216,7 @@ void MainWindow::slotToggleTraining()
     }
     UpdateGameText();
     displayVariations();
+    training.initialize(*m_currentDatabase);
 }
 
 void MainWindow::slotToggleAutoRespond()
