@@ -2216,7 +2216,6 @@ void MainWindow::slotToggleTraining()
     }
     UpdateGameText();
     displayVariations();
-    training.initialize(*m_currentDatabase);
 }
 
 void MainWindow::slotToggleAutoRespond()

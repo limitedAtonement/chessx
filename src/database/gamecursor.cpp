@@ -202,7 +202,7 @@ bool GameCursor::atLineStart(MoveId moveId) const
         return false;
     }
     return (m_nodes[node].previousNode == m_nodes[node].parentNode)
-        || m_nodes[node].previousNode == 0;
+        || m_nodes[node].previousNode == ROOT_NODE;
 }
 
 bool GameCursor::atLineEnd(MoveId moveId) const
