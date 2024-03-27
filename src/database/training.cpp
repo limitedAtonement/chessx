@@ -2,26 +2,59 @@
 #include "databaseinfo.h"
 #include "training.h"
 #include "database.h"
+#include "output.h"
 #include <QDateTime>
 #include <iostream>
 
+static constexpr char const * datetime_format = "yyyy-MM-ddThh:mm:ss";
+static const QRegularExpression last_reviewed_regex("last reviewed: ([^;]+);");
+
 static std::time_t get_last_reviewed_from_annotation(QString const & annotation)
 {
+    QRegularExpressionMatch match = last_reviewed_regex.match(annotation);
+    if (match.hasMatch())
+    {
+        QDateTime dt = QDateTime::fromString(match.captured(1), datetime_format);
+        return dt.currentSecsSinceEpoch();
+    }
     return 0;
 }
 
+static const QRegularExpression first_reviewed_regex("first reviewed: ([^;]+);");
 static std::time_t get_first_reviewed_from_annotation(QString const & annotation)
 {
+    QRegularExpressionMatch match = first_reviewed_regex.match(annotation);
+    if (match.hasMatch())
+    {
+        QDateTime dt = QDateTime::fromString(match.captured(1), datetime_format);
+        return dt.currentSecsSinceEpoch();
+    }
     return 0;
 }
 
+static const QRegularExpression bin_regex("bin: ([^;]+);");
 static uint32_t get_bin_from_annotation(QString const & annotation)
 {
+    QRegularExpressionMatch match = first_reviewed_regex.match(annotation);
+    if (match.hasMatch())
+    {
+        bool ok;
+        uint32_t ret {match.captured(1).toInt(&ok)};
+        return ok ? ret : 0;
+    }
     return 0;
 }
 
+static const QRegularExpression correct_regex("correct in a row: ([^;]+);");
 static uint32_t get_correct_from_annotation(QString const & annotation)
 {
+    QRegularExpressionMatch match = correct_regex.match(annotation);
+    if (match.hasMatch())
+    {
+        bool ok;
+        uint32_t ret {match.captured(1).toInt(&ok)};
+        return ok ? ret : 0;
+    }
     return 0;
 }
 
@@ -69,7 +102,6 @@ void get_training_lines(GameX & game, std::vector<training_line> & lines)
 
 void Training::initialize(Database & db, Color color)
 {
-    std::cout << "Got database with " << db.count() << " games!\n";
     for (quint64 game_id{0}; game_id < db.count(); ++game_id)
     {
         games.emplace_back();
@@ -78,10 +110,14 @@ void Training::initialize(Database & db, Color color)
             std::cerr << "Failed to load game " << game_id << " continuing...\n";
             continue;
         }
-        games.back().cursor().moveToStart();
-        std::cout << "Game " << game_id << " has " << games.back().cursor().countMoves() << " moves.\n";
+        games.back().moveToStart();
+        std::cout << "Initialized with game " << game_id << " has " << games.back().cursor().countMoves() << " moves.\n";
         get_training_lines(games.back(), lines);
     }
+    current_line = 1;
+    // If the trainee is White, it's his turn.
+    // If the trainee is Black, the trainer has already made a move for white.
+    current_move_in_line = color == White ? 0 : 1;
     this->training_color = color;
 }
 
@@ -89,19 +125,17 @@ bool Training::move(Move const & new_move)
 {
     try
     {
-        std::cout << "Trying move " << new_move.toAlgebraicDebug().toStdString() << '\n';
         Move const & expected_move {lines.at(current_line).moves.at(current_move_in_line)};
-        std::cout << "Expecting " << expected_move.toAlgebraicDebug().toStdString() << '\n';
-        if (expected_move.to() == new_move.to() && expected_move.from() == new_move.from())
+        // bool operator==(Move const &, Move const &) may be a little too picky for us.
+        if (expected_move.to() != new_move.to() || expected_move.from() != new_move.from())
         {
-            std::cout << "  all good!\n";
-            next_move();
-            handle_done();
-            return true;
+            missed_any_this_time = true;
+            return false;
         }
-        std::cout << "  not good!\n";
-        missed_any_this_time = true;
-        return false;
+        // Increment the current move marker for the trainee and trainer.
+        current_move_in_line += 2;
+        handle_done();
+        return true;
     }
     catch (std::out_of_range const &)
     {
@@ -110,11 +144,15 @@ bool Training::move(Move const & new_move)
     return true;
 }
 
-Move Training::next_move(void)
+Move Training::last_response(void)
 {
+    if (!current_move_in_line)
+        // If trainee is white, there was no last response
+        // If the trainee is block, the "current move" should never be 0
+        return {chessx::Square::InvalidSquare, chessx::Square::InvalidSquare};
     try
     {
-        return lines.at(current_line).moves.at(current_move_in_line++);
+        return lines.at(current_line).moves.at(current_move_in_line-1);
     }
     catch (std::out_of_range const &)
     {
@@ -122,7 +160,6 @@ Move Training::next_move(void)
     }
 }
 
-static constexpr char const * datetime_format = "yyyy-MM-dd";
 // Returns true if we're done training this line, handles bookkeeping
 // to record training progress on the current line, and resets the training object.
 bool Training::handle_done()
@@ -179,35 +216,54 @@ bool Training::finished(void)
 #include "pgndatabase.h"
 #include "settings.h"
 #include "chessxsettings.h"
-void test_review(PgnDatabase & db)
+
+void test_successful_review(Database & db)
 {
+    std::vector<Move> moves{
+        {chessx::Square::e2, chessx::Square::e4},
+        {chessx::Square::g1, chessx::Square::f3},
+        {chessx::Square::f1, chessx::Square::b5},
+    };
     Training t;
-    std::cout << "  test review...\n";
+    std::cout << "test_successful_review...\n";
     t.initialize(db, White);
     std::cout << " initialized\n";
-    if (!t.move({chessx::Square::e2, chessx::Square::e4}))
+    for (Move m : moves)
     {
-        std::cerr << "e4 should be fine\n";
-        return;
+        // Check for variation
+        if (t.last_response().from() == chessx::Square::d7)
+        {
+            m = {chessx::Square::b1, chessx::Square::c3};
+        }
+        if (!t.move(m))
+        {
+            std::cerr << "----Failure on  move " << m.toAlgebraicDebug().toStdString() << "\n";
+            break;
+        }
     }
-    std::cout << "successfultest\n";
+    std::cout << "test complete\n";
 }
 
 void test_training(void)
 {
-    std::cout << "testing training\n";
+    // PgnDatabase needs this global
     AppSettings = new ChessXSettings;
+    char const * const db_file{"../practice.pgn"};
+    std::cout << "testing training\n";
     PgnDatabase db;
-    if (!db.open("/home/lawsa/Documents/chessdata/my white openings.pgn", true))
+    if (!db.open(db_file, true))
     {
-        std::cout << "Failed to open test training file\n";
+        std::cerr << "Failed to open test training file\n";
         return;
     }
     if (!db.parseFile())
     {
-        std::cout << "Failed to parse test training file\n";
+        std::cerr << "Failed to parse test training file\n";
         return;
     }
-    test_review(db);
+    test_successful_review(db);
+    Output output(Output::Pgn);
+    // Cannot output to the same file that the DB is currently using.
+    output.outputLatin1("../test-result.png", db);
 }
 #endif

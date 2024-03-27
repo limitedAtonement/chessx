@@ -31,9 +31,10 @@ struct Training
     void initialize(Database&, Color);
     // If the move is correct according to the current training line
     bool move(Move const &);
-    // Returns the next move then increments the "next move"
-    // This should be used to tell the trainer how to respond to the trainee
-    Move next_move(void);
+    // This should be used to tell the trainer how to respond to the
+    // trainee's last move.
+    // If the trainee moves first and hasn't moved yet, returns an Invalid move.
+    Move last_response(void);
     bool finished(void);
 private:
     std::vector<training_line> lines;
