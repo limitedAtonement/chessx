@@ -39,8 +39,10 @@ static uint32_t get_bin_from_annotation(QString const & annotation)
     if (match.hasMatch())
     {
         bool ok;
-        uint32_t ret {match.captured(1).toInt(&ok)};
-        return ok ? ret : 0;
+        int32_t ret {match.captured(1).toInt(&ok)};
+        if (ret < 0)
+            return 0;
+        return ok ? static_cast<uint32_t>(ret) : 0;
     }
     return 0;
 }
@@ -52,13 +54,15 @@ static uint32_t get_correct_from_annotation(QString const & annotation)
     if (match.hasMatch())
     {
         bool ok;
-        uint32_t ret {match.captured(1).toInt(&ok)};
-        return ok ? ret : 0;
+        int32_t ret {match.captured(1).toInt(&ok)};
+        if (ret < 0)
+            return 0;
+        return ok ? static_cast<uint32_t>(ret) : 0;
     }
     return 0;
 }
 
-static training_line get_training_line(GameX & game)
+static training_line get_training_line(GameX & game, GameId id)
 {
     std::vector<Move> moves;
     moves.reserve(game.plyCount());
@@ -74,28 +78,28 @@ static training_line get_training_line(GameX & game)
     std::time_t last_reviewed = get_last_reviewed_from_annotation(annotation);
     std::time_t first_reviewed = get_first_reviewed_from_annotation(annotation);
     uint32_t correct_in_a_row = get_correct_from_annotation(annotation);
-    return {std::move(moves), bin, last_reviewed, first_reviewed, correct_in_a_row, game.currentMove(), game};
+    return {std::move(moves), bin, last_reviewed, first_reviewed, correct_in_a_row, game.currentMove(), game, id};
 }
 
 /** Reads all child nodes in the game and adds a training_line for
  * any leaf nodes found
  */
-void get_training_lines(GameX & game, std::vector<training_line> & lines)
+void get_training_lines(GameX & game, GameId id, std::vector<training_line> & lines)
 {
     if (game.nextMove() == NO_MOVE)
     {
-        lines.emplace_back(get_training_line(game));
+        lines.emplace_back(get_training_line(game, id));
         return;
     }
     game.forward();
-    get_training_lines(game, lines);
+    get_training_lines(game, id, lines);
     game.backward();
     if (!game.variationCount())
         return;
     for (MoveId const & variation_move : game.variations())
     {
         game.enterVariation(variation_move);
-        get_training_lines(game, lines);
+        get_training_lines(game, id, lines);
         game.backward();
     }
 }
@@ -112,9 +116,9 @@ void Training::initialize(Database & db, Color color)
         }
         games.back().moveToStart();
         std::cout << "Initialized with game " << game_id << " has " << games.back().cursor().countMoves() << " moves.\n";
-        get_training_lines(games.back(), lines);
+        get_training_lines(games.back(), game_id, lines);
     }
-    current_line = 1;
+    current_line = 0;
     // If the trainee is White, it's his turn.
     // If the trainee is Black, the trainer has already made a move for white.
     current_move_in_line = color == White ? 0 : 1;
@@ -144,7 +148,7 @@ bool Training::move(Move const & new_move)
     return true;
 }
 
-Move Training::last_response(void)
+Move Training::last_response(void) const
 {
     if (!current_move_in_line)
         // If trainee is white, there was no last response
@@ -157,6 +161,29 @@ Move Training::last_response(void)
     catch (std::out_of_range const &)
     {
         return {chessx::Square::InvalidSquare, chessx::Square::InvalidSquare};
+    }
+}
+
+std::optional<GameId> Training::get_game_id(void) const
+{
+    try
+    {
+        return lines.at(current_line).game_id;
+    }
+    catch (std::out_of_range const &)
+    {
+        return 0;
+    }
+}
+GameX * Training::get_game(void)
+{
+    try
+    {
+        return &lines.at(current_line).game;
+    }
+    catch (std::out_of_range const &)
+    {
+        return nullptr;
     }
 }
 
@@ -191,7 +218,7 @@ bool Training::handle_done()
         QString new_annotation = QString{"bin: %1; last reviewed: %2; first reviewed: %3; correct in a row: %4"}
                 .arg(line.bin).arg(last_reviewed.toString(datetime_format)).arg(first_reviewed.toString(datetime_format))
                 .arg(line.correct_in_a_row);
-        lines.at(current_line).game.dbSetAnnotation(new_annotation, GameX::Position::BeforeMove);
+        lines.at(current_line).game.dbSetAnnotation(new_annotation, line.leaf_id, GameX::Position::AfterMove);
     }
     catch (std::out_of_range const &)
     {
@@ -200,7 +227,7 @@ bool Training::handle_done()
     return true;
 }
 
-bool Training::finished(void)
+bool Training::finished(void) const
 {
     try
     {
@@ -213,7 +240,7 @@ bool Training::finished(void)
 }
 
 #if TRAINING_TEST
-#include "pgndatabase.h"
+#include "memorydatabase.h"
 #include "settings.h"
 #include "chessxsettings.h"
 
@@ -241,29 +268,43 @@ void test_successful_review(Database & db)
             break;
         }
     }
+    if (!t.finished())
+    {
+        std::cerr << "   Training should be finished\n";
+        return;
+    }
+    GameX * updated_game = t.get_game();
+    std::optional<GameId> updated_game_id = t.get_game_id();
+    if (!updated_game || !updated_game_id)
+    {
+        std::cerr << "   Couldn't get trained game\n";
+        return;
+    }
+    db.replace(*updated_game_id, *updated_game);
+    Output output(Output::Pgn);
+    // Cannot output to the same file that the DB is currently using.
+    output.outputLatin1("../test-result.pgn", db);
     std::cout << "test complete\n";
 }
 
 void test_training(void)
 {
-    // PgnDatabase needs this global
+    // memoryDatabase needs this global
     AppSettings = new ChessXSettings;
+    AppSettings->setValue("/General/automaticECO", false);
     char const * const db_file{"../practice.pgn"};
     std::cout << "testing training\n";
-    PgnDatabase db;
+    MemoryDatabase db;
     if (!db.open(db_file, true))
     {
         std::cerr << "Failed to open test training file\n";
         return;
     }
-    if (!db.parseFile())
+    if (!static_cast<Database&>(db).parseFile())
     {
         std::cerr << "Failed to parse test training file\n";
         return;
     }
     test_successful_review(db);
-    Output output(Output::Pgn);
-    // Cannot output to the same file that the DB is currently using.
-    output.outputLatin1("../test-result.png", db);
 }
 #endif
