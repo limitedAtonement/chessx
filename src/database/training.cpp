@@ -115,7 +115,7 @@ void Training::initialize(Database & db, Color color)
             continue;
         }
         games.back().moveToStart();
-        std::cout << "Initialized with game " << game_id << " has " << games.back().cursor().countMoves() << " moves.\n";
+        std::cout << "     initialized with game " << game_id << " has " << games.back().cursor().countMoves() << " moves.\n";
         get_training_lines(games.back(), game_id, lines);
     }
     current_line = 0;
@@ -200,10 +200,19 @@ bool Training::handle_done()
         if (!missed_any_this_time)
         {
             ++line.correct_in_a_row;
+            std::cout << "  Got all correct! up to " << line.correct_in_a_row << '\n';
             if (line.correct_in_a_row > 2)
             {
-                line.correct_in_a_row = 0;
-                ++line.bin;
+                if (line.bin < 6)
+                {
+                    std::cout << "      upping bin\n";
+                    line.correct_in_a_row = 0;
+                    ++line.bin;
+                }
+                else
+                {
+                    --line.correct_in_a_row;
+                }
             }
         }
         else
@@ -213,9 +222,14 @@ bool Training::handle_done()
             if (line.bin)
                 --line.bin;
         }
+        std::time(&line.last_reviewed);
         QDateTime last_reviewed = QDateTime::fromSecsSinceEpoch(line.last_reviewed);
+        if (line.first_reviewed == 0)
+        {
+            line.first_reviewed = line.last_reviewed;
+        }
         QDateTime first_reviewed = QDateTime::fromSecsSinceEpoch(line.first_reviewed);
-        QString new_annotation = QString{"bin: %1; last reviewed: %2; first reviewed: %3; correct in a row: %4"}
+        QString new_annotation = QString{"last reviewed: %2; first reviewed: %3; correct in a row: %4;bin: %1;"}
                 .arg(line.bin).arg(last_reviewed.toString(datetime_format)).arg(first_reviewed.toString(datetime_format))
                 .arg(line.correct_in_a_row);
         lines.at(current_line).game.dbSetAnnotation(new_annotation, line.leaf_id, GameX::Position::AfterMove);
@@ -231,7 +245,7 @@ bool Training::finished(void) const
 {
     try
     {
-        return current_move_in_line >= lines.at(current_line).moves.size()-1;
+        return current_move_in_line >= lines.at(current_line).moves.size();
     }
     catch (std::out_of_range const &)
     {
@@ -254,7 +268,6 @@ void test_successful_review(Database & db)
     Training t;
     std::cout << "test_successful_review...\n";
     t.initialize(db, White);
-    std::cout << " initialized\n";
     for (Move m : moves)
     {
         // Check for variation
@@ -264,7 +277,7 @@ void test_successful_review(Database & db)
         }
         if (!t.move(m))
         {
-            std::cerr << "----Failure on  move " << m.toAlgebraicDebug().toStdString() << "\n";
+            std::cerr << "   -Failure on  move " << m.toAlgebraicDebug().toStdString() << "\n";
             break;
         }
     }
@@ -283,7 +296,58 @@ void test_successful_review(Database & db)
     db.replace(*updated_game_id, *updated_game);
     Output output(Output::Pgn);
     // Cannot output to the same file that the DB is currently using.
-    output.outputLatin1("../test-result.pgn", db);
+    output.outputLatin1("../test-successful-result.pgn", db);
+    std::cout << "test complete\n";
+}
+
+void test_failed_review(Database & db)
+{
+    std::vector<Move> moves{
+        {chessx::Square::e2, chessx::Square::e4},
+        {chessx::Square::g1, chessx::Square::f3},
+        {chessx::Square::f1, chessx::Square::b5},
+    };
+    Move bad_move{chessx::Square::e1, chessx::Square::d1};
+    Training t;
+    std::cout << "test_failed_review...\n";
+    t.initialize(db, White);
+    for (Move m : moves)
+    {
+        if (t.move(bad_move))
+        {
+            std::cerr << "   Bad move should be rejected\n";
+        }
+        if (t.finished())
+        {
+            std::cerr << "   Training should not be over after bad move\n";
+        }
+        // Check for variation
+        if (t.last_response().from() == chessx::Square::d7)
+        {
+            m = {chessx::Square::b1, chessx::Square::c3};
+        }
+        if (!t.move(m))
+        {
+            std::cerr << "   -Failure on  move " << m.toAlgebraicDebug().toStdString() << "\n";
+            break;
+        }
+    }
+    if (!t.finished())
+    {
+        std::cerr << "   Training should be finished\n";
+        return;
+    }
+    GameX * updated_game = t.get_game();
+    std::optional<GameId> updated_game_id = t.get_game_id();
+    if (!updated_game || !updated_game_id)
+    {
+        std::cerr << "   Couldn't get trained game\n";
+        return;
+    }
+    db.replace(*updated_game_id, *updated_game);
+    Output output(Output::Pgn);
+    // Cannot output to the same file that the DB is currently using.
+    output.outputLatin1("../test-failed-result.pgn", db);
     std::cout << "test complete\n";
 }
 
@@ -293,18 +357,21 @@ void test_training(void)
     AppSettings = new ChessXSettings;
     AppSettings->setValue("/General/automaticECO", false);
     char const * const db_file{"../practice.pgn"};
-    std::cout << "testing training\n";
-    MemoryDatabase db;
-    if (!db.open(db_file, true))
+    std::vector<std::function<void(Database &)>> tests {test_successful_review, test_failed_review};
+    for (std::function<void(Database &)> const & test : tests)
     {
-        std::cerr << "Failed to open test training file\n";
-        return;
+        MemoryDatabase db;
+        if (!db.open(db_file, true))
+        {
+            std::cerr << "Failed to open test training file\n";
+            return;
+        }
+        if (!static_cast<Database&>(db).parseFile())
+        {
+            std::cerr << "Failed to parse test training file\n";
+            return;
+        }
+        test(db);
     }
-    if (!static_cast<Database&>(db).parseFile())
-    {
-        std::cerr << "Failed to parse test training file\n";
-        return;
-    }
-    test_successful_review(db);
 }
 #endif
