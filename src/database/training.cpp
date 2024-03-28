@@ -7,8 +7,8 @@
 #include <iostream>
 
 static constexpr char const * datetime_format = "yyyy-MM-ddThh:mm:ss";
-static const QRegularExpression last_reviewed_regex("last reviewed: ([^;]+);");
 
+static const QRegularExpression last_reviewed_regex("last reviewed: ([^;]+);");
 static std::time_t get_last_reviewed_from_annotation(QString const & annotation)
 {
     QRegularExpressionMatch match = last_reviewed_regex.match(annotation);
@@ -32,34 +32,38 @@ static std::time_t get_first_reviewed_from_annotation(QString const & annotation
     return 0;
 }
 
-static const QRegularExpression bin_regex("bin: ([^;]+);");
-static uint32_t get_bin_from_annotation(QString const & annotation)
+static const QRegularExpression next_review_regex("next review: ([^;]+);");
+static std::time_t get_next_review_from_annotation(QString const & annotation)
 {
-    QRegularExpressionMatch match = first_reviewed_regex.match(annotation);
+    QRegularExpressionMatch match = next_review_regex.match(annotation);
     if (match.hasMatch())
     {
-        bool ok;
-        int32_t ret {match.captured(1).toInt(&ok)};
-        if (ret < 0)
-            return 0;
-        return ok ? static_cast<uint32_t>(ret) : 0;
+        QDateTime dt = QDateTime::fromString(match.captured(1), datetime_format);
+        return dt.currentSecsSinceEpoch();
     }
     return 0;
 }
 
-static const QRegularExpression correct_regex("correct in a row: ([^;]+);");
-static uint32_t get_correct_from_annotation(QString const & annotation)
+// Sort training_lines
+static bool operator<(training_line const & lhs, training_line const & rhs)
 {
-    QRegularExpressionMatch match = correct_regex.match(annotation);
-    if (match.hasMatch())
+    if (!lhs.has_been_seen || !rhs.has_been_seen)
     {
-        bool ok;
-        int32_t ret {match.captured(1).toInt(&ok)};
-        if (ret < 0)
-            return 0;
-        return ok ? static_cast<uint32_t>(ret) : 0;
+        if (!lhs.has_been_seen)
+        {
+            if (!rhs.has_been_seen)
+            {
+                // For unseen lines, look at the longest one first.
+                // This may be a mistake, but I would think we want to learn
+                // the "main line" first.
+                return lhs.moves.size() < rhs.moves.size();
+            }
+            // Return a line that has been seen above a new one
+            return true;
+        }
+        return false;
     }
-    return 0;
+    return lhs.next_review < rhs.next_review;
 }
 
 static training_line get_training_line(GameX & game, GameId id)
@@ -74,11 +78,11 @@ static training_line get_training_line(GameX & game, GameId id)
     }
     std::reverse(moves.begin(), moves.end());
     QString annotation = game.annotation();
-    uint32_t bin = get_bin_from_annotation(annotation);
+    bool has_been_seen = annotation.length();
     std::time_t last_reviewed = get_last_reviewed_from_annotation(annotation);
     std::time_t first_reviewed = get_first_reviewed_from_annotation(annotation);
-    uint32_t correct_in_a_row = get_correct_from_annotation(annotation);
-    return {std::move(moves), bin, last_reviewed, first_reviewed, correct_in_a_row, game.currentMove(), game, id};
+    std::time_t next_review = get_next_review_from_annotation(annotation);
+    return {std::move(moves), has_been_seen, first_reviewed, last_reviewed, next_review, game.currentMove(), &game, id};
 }
 
 /** Reads all child nodes in the game and adds a training_line for
@@ -118,7 +122,7 @@ void Training::initialize(Database & db, Color color)
         std::cout << "     initialized with game " << game_id << " has " << games.back().cursor().countMoves() << " moves.\n";
         get_training_lines(games.back(), game_id, lines);
     }
-    current_line = 0;
+    std::sort(lines.begin(), lines.end());
     // If the trainee is White, it's his turn.
     // If the trainee is Black, the trainer has already made a move for white.
     current_move_in_line = color == White ? 0 : 1;
@@ -127,9 +131,14 @@ void Training::initialize(Database & db, Color color)
 
 bool Training::move(Move const & new_move)
 {
+    if (lines.empty())
+    {
+        std::cerr << "In Training::move, no training lines\n";
+        return false;
+    }
     try
     {
-        Move const & expected_move {lines.at(current_line).moves.at(current_move_in_line)};
+        Move const & expected_move {lines.front().moves.at(current_move_in_line)};
         // bool operator==(Move const &, Move const &) may be a little too picky for us.
         if (expected_move.to() != new_move.to() || expected_move.from() != new_move.from())
         {
@@ -154,9 +163,14 @@ Move Training::last_response(void) const
         // If trainee is white, there was no last response
         // If the trainee is block, the "current move" should never be 0
         return {chessx::Square::InvalidSquare, chessx::Square::InvalidSquare};
+    if (lines.empty())
+    {
+        std::cerr << "In Training::last_response, no training lines\n";
+        return {chessx::Square::InvalidSquare, chessx::Square::InvalidSquare};
+    }
     try
     {
-        return lines.at(current_line).moves.at(current_move_in_line-1);
+        return lines.front().moves.at(current_move_in_line-1);
     }
     catch (std::out_of_range const &)
     {
@@ -166,91 +180,96 @@ Move Training::last_response(void) const
 
 std::optional<GameId> Training::get_game_id(void) const
 {
-    try
+    if (lines.empty())
     {
-        return lines.at(current_line).game_id;
-    }
-    catch (std::out_of_range const &)
-    {
+        std::cerr << "In Training::get_game_id, no training lines\n";
         return 0;
     }
+    return lines.front().game_id;
 }
 GameX * Training::get_game(void)
 {
-    try
+    if (lines.empty())
     {
-        return &lines.at(current_line).game;
-    }
-    catch (std::out_of_range const &)
-    {
+        std::cerr << "In Training::get_game, no training lines\n";
         return nullptr;
     }
+    return lines.front().game;
 }
 
 // Returns true if we're done training this line, handles bookkeeping
 // to record training progress on the current line, and resets the training object.
 bool Training::handle_done()
 {
-    if (!finished())
+    if (!finished_current_training() || lines.empty())
+    {
         return false;
-    try
-    {
-        training_line & line = lines.at(current_line);
-        line.last_reviewed = std::time(nullptr);
-        if (!missed_any_this_time)
-        {
-            ++line.correct_in_a_row;
-            std::cout << "  Got all correct! up to " << line.correct_in_a_row << '\n';
-            if (line.correct_in_a_row > 2)
-            {
-                if (line.bin < 6)
-                {
-                    std::cout << "      upping bin\n";
-                    line.correct_in_a_row = 0;
-                    ++line.bin;
-                }
-                else
-                {
-                    --line.correct_in_a_row;
-                }
-            }
-        }
-        else
-        {
-            missed_any_this_time = false;
-            line.correct_in_a_row = 0;
-            if (line.bin)
-                --line.bin;
-        }
-        std::time(&line.last_reviewed);
-        QDateTime last_reviewed = QDateTime::fromSecsSinceEpoch(line.last_reviewed);
-        if (line.first_reviewed == 0)
-        {
-            line.first_reviewed = line.last_reviewed;
-        }
-        QDateTime first_reviewed = QDateTime::fromSecsSinceEpoch(line.first_reviewed);
-        QString new_annotation = QString{"last reviewed: %2; first reviewed: %3; correct in a row: %4;bin: %1;"}
-                .arg(line.bin).arg(last_reviewed.toString(datetime_format)).arg(first_reviewed.toString(datetime_format))
-                .arg(line.correct_in_a_row);
-        lines.at(current_line).game.dbSetAnnotation(new_annotation, line.leaf_id, GameX::Position::AfterMove);
     }
-    catch (std::out_of_range const &)
+    training_line & line {lines.front()};
+    if (!line.game)
     {
-        std::cerr << "Failed to handle training finished due to out of range error.\n";
+        std::cerr << "in Training::handle_done(), training line doesn't have a game reference.\n";
+        return false;
+    }
+    line.last_reviewed = std::time(nullptr);
+    int increment_sign {missed_any_this_time ? -1 : 1};
+    std::time_t increment {line.next_review - line.last_reviewed};
+    increment *= increment_sign;
+    std::time(&line.last_reviewed);
+    line.next_review += increment;
+    QDateTime last_reviewed = QDateTime::fromSecsSinceEpoch(line.last_reviewed);
+    QDateTime next_review = QDateTime::fromSecsSinceEpoch(line.last_reviewed);
+    QString new_annotation = QString{"last reviewed: %1; next review: %2"}
+        .arg(last_reviewed.toString(datetime_format)).arg(next_review.toString(datetime_format));
+    line.game->dbSetAnnotation(new_annotation, line.leaf_id, GameX::Position::AfterMove);
+    return true;
+}
+
+bool Training::finished_current_training(void) const
+{
+    if (lines.empty())
+    {
+        std::cerr << "In Training::finished_current_training, no training lines\n";
+        return false;
+    }
+    return current_move_in_line >= lines.front().moves.size();
+}
+
+bool Training::done_training(void) const
+{
+    std::time_t const midnight_this_morning{QDateTime{QDate::currentDate(), {}}.currentSecsSinceEpoch()};
+    unsigned new_lines_studied_today {0};
+    bool new_lines_to_study {false};
+    for (training_line const & line : lines)
+    {
+        if (line.last_reviewed != 0)
+        {
+            continue;
+        }
+        if (line.first_reviewed != 0 && line.first_reviewed >= midnight_this_morning)
+        {
+            ++new_lines_studied_today;
+        }
+        new_lines_to_study = true;
+    }
+    if (new_lines_to_study && new_lines_studied_today < this->new_lines_per_day)
+    {
+        return false;
+    }
+    std::time_t const now{std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())};
+    for (training_line const & line : lines)
+    {
+        if (line.next_review <= now)
+        {
+            return false;
+        }
     }
     return true;
 }
 
-bool Training::finished(void) const
+Training::Training(unsigned n)
+    : new_lines_per_day{n}
 {
-    try
-    {
-        return current_move_in_line >= lines.at(current_line).moves.size();
-    }
-    catch (std::out_of_range const &)
-    {
-        return true;
-    }
 }
 
 #if TRAINING_TEST
@@ -265,7 +284,7 @@ void test_successful_review(Database & db)
         {chessx::Square::g1, chessx::Square::f3},
         {chessx::Square::f1, chessx::Square::b5},
     };
-    Training t;
+    Training t {2};
     std::cout << "test_successful_review...\n";
     t.initialize(db, White);
     for (Move m : moves)
@@ -281,9 +300,9 @@ void test_successful_review(Database & db)
             break;
         }
     }
-    if (!t.finished())
+    if (!t.finished_current_training())
     {
-        std::cerr << "   Training should be finished\n";
+        std::cerr << "   Training should be finished_current_training\n";
         return;
     }
     GameX * updated_game = t.get_game();
@@ -317,7 +336,7 @@ void test_failed_review(Database & db)
         {
             std::cerr << "   Bad move should be rejected\n";
         }
-        if (t.finished())
+        if (t.finished_current_training())
         {
             std::cerr << "   Training should not be over after bad move\n";
         }
@@ -332,7 +351,7 @@ void test_failed_review(Database & db)
             break;
         }
     }
-    if (!t.finished())
+    if (!t.finished_current_training())
     {
         std::cerr << "   Training should be finished\n";
         return;
@@ -351,13 +370,51 @@ void test_failed_review(Database & db)
     std::cout << "test complete\n";
 }
 
+void train_one_per_day(Database & db)
+{
+    std::vector<Move> moves{
+        {chessx::Square::e2, chessx::Square::e4},
+        {chessx::Square::g1, chessx::Square::f3},
+        {chessx::Square::f1, chessx::Square::b5},
+    };
+    Move bad_move{chessx::Square::e1, chessx::Square::d1};
+    Training t {1};
+    std::cout << "train_one_per_day...\n";
+    t.initialize(db, White);
+    for (Move m : moves)
+    {
+        // Check for variation
+        if (t.last_response().from() == chessx::Square::d7)
+        {
+            m = {chessx::Square::b1, chessx::Square::c3};
+        }
+        if (!t.move(m))
+        {
+            std::cerr << "   -Failure on  move " << m.toAlgebraicDebug().toStdString() << "\n";
+            break;
+        }
+    }
+    if (!t.finished_current_training())
+    {
+        std::cerr << "   Training should be finished\n";
+        return;
+    }
+    if (!t.done_training())
+    {
+        std::cerr << "   Training should be done today\n";
+        return;
+    }
+    std::cout << "test complete\n";
+}
+
 void test_training(void)
 {
     // memoryDatabase needs this global
     AppSettings = new ChessXSettings;
     AppSettings->setValue("/General/automaticECO", false);
     char const * const db_file{"../practice.pgn"};
-    std::vector<std::function<void(Database &)>> tests {test_successful_review, test_failed_review};
+    std::vector<std::function<void(Database &)>> tests {test_successful_review, test_failed_review,
+        train_one_per_day};
     for (std::function<void(Database &)> const & test : tests)
     {
         MemoryDatabase db;
