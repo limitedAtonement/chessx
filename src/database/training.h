@@ -32,8 +32,9 @@ struct Training
     // initial_increment is the amount of time between the first review of
     // a line and the next review. (Subsequent review times are based on this.)
     Training(unsigned new_lines_per_day = 1, std::time_t initial_increment = 20);
-    void initialize(Database&, Color);
-    // If the move is correct according to the current training line
+    // Returns false if no lines are available for training
+    bool initialize(Database&, Color);
+    // Returns true if the move is correct according to the current training line
     bool move(Move const &);
     // This should be used to tell the trainer how to respond to the
     // trainee's last move.
@@ -48,6 +49,7 @@ struct Training
     // (training hasn't begun, hasn't been initialized, etc.), nullptr is returned.
     GameX * get_game(void);
     std::optional<GameId> get_game_id(void) const;
+    bool missed_any(void) const;
 #if TRAINING_TEST
     std::vector<training_line> & get_lines(void);
 #endif

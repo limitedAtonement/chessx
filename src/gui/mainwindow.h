@@ -519,6 +519,7 @@ protected slots:
 #endif
 protected:
     void moveChanged();
+    void doTraining(Move);
     bool pasteFen(QString& errorText, QString fen, bool newGame=false);
     void copyGame(DatabaseInfo* pTargetDB, DatabaseInfo* pSourceDB, GameId index);
     Database* getDatabaseByPath(QString path);
@@ -668,8 +669,6 @@ private:
     void setResultForCurrentPosition();
     /** Set the game result for a final position */
     void setResultAgainstColorToMove();
-    /** true if a automatic response mode is active */
-    bool autoRespondActive() const;
     /** Trigger the next move in auto-responding modes */
     void triggerBoardMove();
     /** Filter Duplicates in the current database */

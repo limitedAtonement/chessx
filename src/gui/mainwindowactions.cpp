@@ -937,6 +937,45 @@ Color MainWindow::UserColor()
     return game().board().toMove();
 }
 
+void MainWindow::doTraining(Move m)
+{
+    if (!training.move(m))
+    {
+        MessageDialog::error(tr("Move not found"));
+        return;
+    }
+    // Make the trained move
+    game().forward();
+    if (training.finished_current_training())
+    {
+        playSound("fanfare");
+        MessageDialog::information(training.missed_any() ?
+            "Your answers weren't quite perfect, but keep trying!"
+            : "Perfect responses!", "Training Complete");
+        m_training->trigger();
+        std::optional<GameId> updated_game_id {training.get_game_id()};
+        GameX * updated_game {training.get_game()};
+        if (!updated_game_id)
+        {
+            MessageDialog::error(tr("Failed to save training progress. No Game ID at end of training."));
+            return;
+        }
+        if (!updated_game)
+        {
+            MessageDialog::error(tr("Failed to save training progress. No Game reference at end of training."));
+            return;
+        }
+        database()->replace(*updated_game_id, *updated_game);
+        return;
+    }
+    Move next_move {training.last_response()};
+    if (!game().findNextMove(next_move))
+    {
+        MessageDialog::error(tr("Failed to get training response."));
+        return;
+    }
+}
+
 void MainWindow::doBoardMove(Move m, unsigned int button, Square from, Square to)
 {
     BoardView::BoardViewAction action = m_boardView->moveActionFromModifier((Qt::KeyboardModifiers) button);
@@ -965,9 +1004,7 @@ void MainWindow::doBoardMove(Move m, unsigned int button, Square from, Square to
             }
 
             if (m_training->isChecked())
-            {
-                //std::cout << "TRAIN!\n";
-            }
+                return doTraining(m);
             // Use an existing move with the correct promotion piece type if it already exists
             if(game().findNextMove(from, to, promotionPiece))
             {
@@ -979,7 +1016,7 @@ void MainWindow::doBoardMove(Move m, unsigned int button, Square from, Square to
                 }
                 else
                 {
-                    if (autoRespondActive())
+                    if (m_autoRespond->isChecked())
                     {
                         triggerBoardMove();
                     }
@@ -988,7 +1025,8 @@ void MainWindow::doBoardMove(Move m, unsigned int button, Square from, Square to
                 }
             }
 
-            if(m_training->isChecked() || m_training2->isChecked())
+            printf(" autorespond checked %d\n", m_autoRespond->isChecked());
+            if(m_training2->isChecked())
             {
                 if (game().atLineEnd())
                 {
@@ -2198,11 +2236,6 @@ void MainWindow::slotGameSetComment(QString annotation)
     }
 }
 
-bool MainWindow::autoRespondActive() const
-{
-    return (m_autoRespond->isChecked() || m_training->isChecked());
-}
-
 void MainWindow::slotToggleTraining()
 {
     // Training data are stored in the database. If there
@@ -2213,6 +2246,11 @@ void MainWindow::slotToggleTraining()
     if (AppSettings->getValue("/Board/noHints").toBool())
     {    
         enterNoHintMode(action->isChecked());
+    }
+    if (action == m_training)
+    {
+        training.initialize(*database(), White);
+        printf("   TRAININg\n");
     }
     UpdateGameText();
     displayVariations();

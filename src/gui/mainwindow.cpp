@@ -2557,7 +2557,7 @@ QString MainWindow::MoveToSpeech(Move m)
     return s;
 }
 
-bool MainWindow::announceMove(Move m)
+bool MainWindow::announceMove(Move)
 {
 #ifdef USE_SPEECH
     if (speech && AppSettings->getValue("/Sound/Move").toInt() == 2)

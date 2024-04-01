@@ -9,20 +9,6 @@
 
 static constexpr char const * datetime_format = "yyyy-MM-ddThh:mm:ss";
 
-static std::string to_string(training_line const & l)
-{
-    std::ostringstream str;
-    str << "line {";
-    for (Move const & m : l.moves)
-    {
-        str << m.toAlgebraicDebug().toStdString() << ',';
-    }
-    str << "; seen? " << l.has_been_seen;
-    str << "; next rev " << l.next_review;
-    str << "}";
-    return str.str();
-}
-
 static const QRegularExpression last_reviewed_regex("last reviewed: ([^;]+);", QRegularExpression::CaseInsensitiveOption);
 static std::time_t get_last_reviewed_from_annotation(QString const & annotation)
 {
@@ -127,7 +113,12 @@ static void get_training_lines(GameX & game, GameId id, std::vector<training_lin
     }
 }
 
-void Training::initialize(Database & db, Color color)
+bool Training::missed_any(void) const
+{
+    return missed_any_this_time;
+}
+
+bool Training::initialize(Database & db, Color color)
 {
     lines.clear();
     for (quint64 game_id{0}; game_id < db.count(); ++game_id)
@@ -141,14 +132,26 @@ void Training::initialize(Database & db, Color color)
         games.back().moveToStart();
         get_training_lines(games.back(), game_id, lines);
     }
+    if (!lines.size())
+    {
+        return false;
+    }
     std::sort(lines.begin(), lines.end());
+    std::time_t const midnight_this_morning{QDateTime{QDate::currentDate(), {}}.toSecsSinceEpoch()};
+    auto const new_lines_learned_today {std::count_if(lines.begin(), lines.end(),
+                [&midnight_this_morning] (training_line const & val) {return val.first_reviewed >= midnight_this_morning;})};
+    if (lines.size() > 1 && lines.front().has_been_seen && !lines.back().has_been_seen && new_lines_learned_today < this->new_lines_per_day)
+    {
+        // We have new lines to learn and we haven't learned the limit for today,
+        // so put one of the new ones on top to learn.
+        std::swap(lines.front(), lines.back());
+    }
     // If the trainee is White, it's his turn.
     // If the trainee is Black, the trainer has already made a move for white.
     current_move_in_line = color == White ? 0 : 1;
     missed_any_this_time = false;
-    //std::cout << "   Initialized. Current line is " << to_string(lines.front()) << '\n';
-    //std::cout << "   (next is " << to_string(lines.at(1)) << '\n';
     this->training_color = color;
+    return true;
 }
 
 bool Training::move(Move const & new_move)
@@ -234,6 +237,7 @@ bool Training::handle_done()
         std::cerr << "in Training::handle_done(), training line doesn't have a game reference.\n";
         return false;
     }
+    // If the trainee missed any, let's reduce the time to review again
     int const increment_sign {missed_any_this_time ? -1 : 1};
     std::time_t increment {(line.next_review - line.last_reviewed)};
     //std::cout << "  ::handle_done. old next review " << line.next_review << " old last reviewed " << line.last_reviewed << 
@@ -317,16 +321,33 @@ Training::Training(unsigned n, std::time_t i)
 #include "settings.h"
 #include "chessxsettings.h"
 
+static std::string to_string(training_line const & l)
+{
+    std::ostringstream str;
+    str << "line {";
+    for (Move const & m : l.moves)
+    {
+        str << m.toAlgebraicDebug().toStdString() << ',';
+    }
+    str << "; seen? " << l.has_been_seen;
+    str << "; next rev " << l.next_review;
+    str << "}";
+    return str.str();
+}
+
 std::vector<training_line> & Training::get_lines(void)
 {
     return lines;
 }
 
-static const QString starting_game {R"(1. e4 e5 2. Nf3 Nc6 ( d5 3. Nc3 ) 3. Bb5 *)"};
+static const QString starting_game {R"(1. e4 e5 2. Nf3 Nc6 ( d5 3. Nc3 ) 3. Bb5 h6 4. h3 *)"};
 static const QString starting_game_one {R"(1. e4 e5 2. Nf3 Nc6
     ( d5 3. Nc3{first reviewed: 2023-01-01T00:00:00; last reviewed: 2024-01-01T00:00:00; next review: 2024-01-02T00:00:00;} )
     3. Bb5     {first reviewed: 2023-01-01T00:00:00; last reviewed: 2024-01-01T00:00:00; next review: 2024-01-02T00:00:01;} *)"};
 static const QString starting_game_two {R"(1. e4 e5 2. Nf3 Nc6 ( d5 3. Nc3{first reviewed: 2023-01-01T00:00:00; last reviewed: 2024-01-01T00:00:00; next review: 2024-01-02T00:00:00;}) 3. Bb5 Nf6 4. Nc3 {first reviewed: 2023-01-01T00:00:00; last reviewed: 2024-01-01T00:00:00; next review: 2024-01-03T00:00:01;} *)"};
+static const QString starting_game_three {R"(1. e4 e5 2. Nf3 Nc6
+    ( d5 3. Nc3 )
+    3. Bb5     {first reviewed: 2023-01-01T00:00:00; last reviewed: 2024-01-01T00:00:00; next review: 2024-01-02T00:00:01;} *)"};
 
 // moves is the moves for both sides
 static bool play_through_line(Training & t, std::vector<Move> const & moves)
@@ -363,20 +384,17 @@ static bool play_through_line(Training & t, std::vector<Move> const & moves)
 
 static bool successful_review(MemoryDatabase & db)
 {
+    // Since we're dealing with two new lines, the longer line should be chosen
     std::vector<Move> moves{
         {chessx::Square::e2, chessx::Square::e4},
         {chessx::Square::g1, chessx::Square::f3},
         {chessx::Square::f1, chessx::Square::b5},
+        {chessx::Square::h2, chessx::Square::h3},
     };
     Training t {2};
     t.initialize(db, White);
     for (Move m : moves)
     {
-        // Check for variation
-        if (t.last_response().from() == chessx::Square::d7)
-        {
-            m = {chessx::Square::b1, chessx::Square::c3};
-        }
         if (!t.move(m))
         {
             std::cerr << "   -Failure on  move " << m.toAlgebraicDebug().toStdString() << "\n";
@@ -408,6 +426,7 @@ static bool failed_review(MemoryDatabase & db)
         {chessx::Square::e2, chessx::Square::e4},
         {chessx::Square::g1, chessx::Square::f3},
         {chessx::Square::f1, chessx::Square::b5},
+        {chessx::Square::h2, chessx::Square::h3},
     };
     Move bad_move{chessx::Square::e1, chessx::Square::d1};
     Training t;
@@ -458,17 +477,13 @@ static bool one_per_day(MemoryDatabase & db)
         {chessx::Square::e2, chessx::Square::e4},
         {chessx::Square::g1, chessx::Square::f3},
         {chessx::Square::f1, chessx::Square::b5},
+        {chessx::Square::h2, chessx::Square::h3},
     };
     Move bad_move{chessx::Square::e1, chessx::Square::d1};
     Training t {1};
     t.initialize(db, White);
     for (Move m : moves)
     {
-        // Check for variation
-        if (t.last_response().from() == chessx::Square::d7)
-        {
-            m = {chessx::Square::b1, chessx::Square::c3};
-        }
         if (!t.move(m))
         {
             std::cerr << "   -Failure on  move " << m.toAlgebraicDebug().toStdString() << "\n";
@@ -613,10 +628,95 @@ static bool sort_training_lines_has_been_seen_first(MemoryDatabase &)
     return true;
 }
 
+static bool sort_training_lines_longest_first(MemoryDatabase &)
+{
+    std::vector<training_line> lines;
+    training_line line0;
+    line0.moves = {
+        {chessx::Square::e2, chessx::Square::e4},
+        {chessx::Square::e7, chessx::Square::e5},
+        {chessx::Square::g1, chessx::Square::f3},
+    };
+    line0.has_been_seen = false;
+    line0.first_reviewed = 0;
+    line0.last_reviewed = 0;
+    line0.next_review = 0;
+    lines.push_back(std::move(line0));
+    training_line line1;
+    line1.moves = {
+        {chessx::Square::e2, chessx::Square::e4},
+        {chessx::Square::e7, chessx::Square::e5},
+        {chessx::Square::g1, chessx::Square::f3},
+        {chessx::Square::c7, chessx::Square::c6},
+        {chessx::Square::c1, chessx::Square::c3},
+    };
+    line1.has_been_seen = false;
+    line1.first_reviewed = 0;
+    line1.last_reviewed = 0;
+    line1.next_review = 0;
+    lines.push_back(std::move(line1));
+    std::sort(lines.begin(), lines.end());
+    if (lines.at(0).moves.size() != 5)
+    {
+        std::cerr << "    Given two new lines, the longer should be learned first\n";
+        return false;
+    }
+    return true;
+}
+
+static bool selects_new_lines(MemoryDatabase & db)
+{
+    std::vector<Move> moves = {{chessx::Square::e2, chessx::Square::e4},
+             {chessx::Square::e7, chessx::Square::e5},
+             {chessx::Square::g1, chessx::Square::f3},
+             {chessx::Square::d7, chessx::Square::d5},
+             {chessx::Square::b1, chessx::Square::c3},
+    };
+    Training t {1, 1};
+    // Should initialize to the new game first
+    t.initialize(db, White);
+    if (!play_through_line(t, moves))
+    {
+        std::cerr << "   Failed to play through new game first variation due\n";
+        return false;
+    }
+    if (t.done_training_today())
+    {
+        std::cerr << "   Today's training should not be done yet\n";
+        return false;
+    }
+    GameX * game{t.get_game()};
+    if (!game)
+    {
+        std::cerr << "   Couldn't get training game\n";
+        return false;
+    }
+    std::optional<GameId> game_id {t.get_game_id()};
+    if (!game_id)
+    {
+        std::cerr << "   Couldn't get game id\n";
+        return false;
+    }
+    db.replace(*game_id, *game);
+    //std::cout << "   finished with first line (nc6); looking for d5...\n";
+    t.initialize(db, White);
+    moves = {{chessx::Square::e2, chessx::Square::e4},
+             {chessx::Square::e7, chessx::Square::e5},
+             {chessx::Square::g1, chessx::Square::f3},
+             {chessx::Square::b8, chessx::Square::c6},
+             {chessx::Square::f1, chessx::Square::b5},
+    };
+    if (!play_through_line(t, moves))
+    {
+        std::cerr << "   Failed to play already-reviewed line\n";
+        return false;
+    }
+    return true;
+}
+
 #define RUN_TEST(function_name, pgn) \
     { \
         MemoryDatabase db; \
-        std::cout << "Running test " #function_name "...\n"; \
         if (!db.openString(pgn)) \
         { \
             std::cerr << "Failed to open test training file\n"; \
@@ -639,5 +739,7 @@ void test_training(void)
     RUN_TEST(progress_to_next_training, starting_game_one)
     RUN_TEST(sort_training_lines_oldest_to_review, starting_game_two)
     RUN_TEST(sort_training_lines_has_been_seen_first, starting_game_two)
+    RUN_TEST(sort_training_lines_longest_first, starting_game)
+    RUN_TEST(selects_new_lines, starting_game_three)
 }
 #endif
