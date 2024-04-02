@@ -89,8 +89,8 @@ int customReportHook(int /* reportType */, char* message, int* /* returnValue */
 
 int main(int argc, char** argv)
 {
-    test_training();
-    return 0;
+    //test_training();
+    //return 0;
 #if defined(_MSC_VER)
 _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 prevHook = _CrtSetReportHook(customReportHook);

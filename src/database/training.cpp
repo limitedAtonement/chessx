@@ -1,4 +1,4 @@
-#define TRAINING_TEST 1
+#define TRAINING_TEST 0
 #include "databaseinfo.h"
 #include "training.h"
 #include "database.h"
@@ -39,7 +39,6 @@ static std::time_t get_next_review_from_annotation(QString const & annotation)
     QRegularExpressionMatch match = next_review_regex.match(annotation);
     if (match.hasMatch())
     {
-        //std::cout << "     next review parse, got one! " << match.captured(1).toStdString() << '\n';
         QDateTime dt = QDateTime::fromString(match.captured(1), datetime_format);
         return dt.toSecsSinceEpoch();
     }
@@ -48,23 +47,28 @@ static std::time_t get_next_review_from_annotation(QString const & annotation)
 
 static bool operator<(training_line const & lhs, training_line const & rhs)
 {
+    //std::cout << "    comparing; ";
     if (!lhs.has_been_seen || !rhs.has_been_seen)
     {
         if (!lhs.has_been_seen)
         {
             if (!rhs.has_been_seen)
             {
+                //std::cout << "using most lines\n";
                 // For unseen lines, look at the longest one first.
                 // This may be a mistake, but I would think we want to learn
                 // the "main line" first.
                 return lhs.moves.size() > rhs.moves.size();
             }
+            //std::cout << "returning a line that has been seen\n";
             // Return a line that has been seen above a new one
             return false;
         }
+        //std::cout << "returning a line that has been seen2\n";
         return true;
     }
-    return lhs.next_review > rhs.next_review;
+    //std::cout << "returning latest for next review\n";
+    return lhs.next_review < rhs.next_review;
 }
 
 static training_line get_training_line(GameX & game, GameId id)
@@ -83,10 +87,10 @@ static training_line get_training_line(GameX & game, GameId id)
     std::time_t last_reviewed = get_last_reviewed_from_annotation(annotation);
     std::time_t first_reviewed = get_first_reviewed_from_annotation(annotation);
     std::time_t next_review = get_next_review_from_annotation(annotation);
-    //std::cout << "   parsed training line annotation: \"" << annotation.toStdString() << "\"\n";
-    //std::cout << "     last review " << last_reviewed << '\n';
-    //std::cout << "     next review " << next_review << '\n';
-    //std::cout << "     first reviewed " << first_reviewed << '\n';
+    std::cout << "   parsed training line annotation: \"" << annotation.toStdString() << "\"\n";
+    std::cout << "     last review " << last_reviewed << '\n';
+    std::cout << "     next review " << next_review << '\n';
+    std::cout << "     first reviewed " << first_reviewed << '\n';
     return {std::move(moves), has_been_seen, first_reviewed, last_reviewed, next_review, game.currentMove(), &game, id};
 }
 
@@ -121,7 +125,7 @@ bool Training::missed_any(void) const
 bool Training::initialize(Database & db, Color color)
 {
     lines.clear();
-    for (quint64 game_id{0}; game_id < db.count(); ++game_id)
+    for (GameId game_id{0}; game_id < db.count(); ++game_id)
     {
         games.emplace_back();
         if (!db.loadGame(game_id, games.back()))
@@ -140,8 +144,14 @@ bool Training::initialize(Database & db, Color color)
     std::time_t const midnight_this_morning{QDateTime{QDate::currentDate(), {}}.toSecsSinceEpoch()};
     auto const new_lines_learned_today {std::count_if(lines.begin(), lines.end(),
                 [&midnight_this_morning] (training_line const & val) {return val.first_reviewed >= midnight_this_morning;})};
+    std::cout << " Learning lin ewith " << lines.front().moves.size() << " moves\n";
+    std::cout << " next line hath " << lines.at(1).moves.size() << " moves\n";
+    std::cout << "   have " << lines.size() << " lines. front seen? " << lines.front().has_been_seen << " back has seen? " <<
+        lines.back().has_been_seen << " learned today " << new_lines_learned_today << " new_lines_per_day " <<
+        this->new_lines_per_day << '\n';
     if (lines.size() > 1 && lines.front().has_been_seen && !lines.back().has_been_seen && new_lines_learned_today < this->new_lines_per_day)
     {
+        std::cout << "New lines to learn!\n";
         // We have new lines to learn and we haven't learned the limit for today,
         // so put one of the new ones on top to learn.
         std::swap(lines.front(), lines.back());
@@ -208,7 +218,7 @@ std::optional<GameId> Training::get_game_id(void) const
     if (lines.empty())
     {
         std::cerr << "In Training::get_game_id, no training lines\n";
-        return 0;
+        return {};
     }
     return lines.front().game_id;
 }
@@ -238,35 +248,44 @@ bool Training::handle_done()
         return false;
     }
     // If the trainee missed any, let's reduce the time to review again
-    int const increment_sign {missed_any_this_time ? -1 : 1};
     std::time_t increment {(line.next_review - line.last_reviewed)};
     //std::cout << "  ::handle_done. old next review " << line.next_review << " old last reviewed " << line.last_reviewed << 
         //" increment " << increment << '\n';
     if (increment == 0)
     {
         //std::cout << "   using initial increment of " << initial_increment << '\n';
-        // Start with 20 second review period
         increment = initial_increment;
     }
-    increment *= increment_sign;
     std::time(&line.last_reviewed);
     //std::cout << "    setting last reviewed to " << line.last_reviewed << '\n';
     if (!line.first_reviewed)
     {
         //std::cout << "     First review!\n";
         line.first_reviewed = line.last_reviewed;
+        line.next_review = line.first_reviewed + increment;
+    }
+    else
+    {
+        if (missed_any_this_time)
+        {
+            increment /= 2;
+        }
+        else
+        {
+            increment *= 2;
+        }
+        line.next_review = line.last_reviewed + increment;
     }
     QDateTime const first_reviewed = QDateTime::fromSecsSinceEpoch(line.first_reviewed);
-    line.next_review = line.last_reviewed + increment;
     //std::cout << "     setting next review to " << line.next_review << '\n';
     QDateTime const last_reviewed = QDateTime::fromSecsSinceEpoch(line.last_reviewed);
     QDateTime const next_review = QDateTime::fromSecsSinceEpoch(line.next_review);
-    QString new_annotation = QString{"first reviewed: %1; last reviewed: %2; next review: %3"}
+    QString new_annotation = QString{"first reviewed: %1; last reviewed: %2; next review: %3;"}
         .arg(first_reviewed.toString(datetime_format))
         .arg(last_reviewed.toString(datetime_format))
         .arg(next_review.toString(datetime_format));
-    //std::cout << "    ::handle_done, addingannotation " << new_annotation.toStdString() << '\n';
-    line.game->dbSetAnnotation(new_annotation, line.leaf_id, GameX::Position::AfterMove);
+    std::cout << "    ::handle_done; adding annotation " << new_annotation.toStdString() << '\n';
+    line.game->setAnnotation(new_annotation, line.leaf_id, GameX::Position::AfterMove);
     return true;
 }
 
@@ -413,10 +432,6 @@ static bool successful_review(MemoryDatabase & db)
         std::cerr << "   Couldn't get trained game\n";
         return false;
     }
-    db.replace(*updated_game_id, *updated_game);
-    Output output(Output::Pgn);
-    // Cannot output to the same file that the DB is currently using.
-    output.outputLatin1("../test-successful-result.pgn", db);
     return true;
 }
 
@@ -464,10 +479,6 @@ static bool failed_review(MemoryDatabase & db)
         std::cerr << "   Couldn't get trained game\n";
         return false;
     }
-    db.replace(*updated_game_id, *updated_game);
-    Output output(Output::Pgn);
-    // Cannot output to the same file that the DB is currently using.
-    output.outputLatin1("../test-failed-result.pgn", db);
     return true;
 }
 

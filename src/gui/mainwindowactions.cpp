@@ -966,6 +966,8 @@ void MainWindow::doTraining(Move m)
             return;
         }
         database()->replace(*updated_game_id, *updated_game);
+        databaseInfo()->loadGame(*updated_game_id);
+        //emit signalGameLoaded(updated_game->startingBoard());
         return;
     }
     Move next_move {training.last_response()};
@@ -2247,7 +2249,7 @@ void MainWindow::slotToggleTraining()
     {    
         enterNoHintMode(action->isChecked());
     }
-    if (action == m_training)
+    if (action == m_training && action->isChecked())
     {
         training.initialize(*database(), White);
         printf("   TRAININg\n");

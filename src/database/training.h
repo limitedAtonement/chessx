@@ -31,7 +31,7 @@ struct Training
 {
     // initial_increment is the amount of time between the first review of
     // a line and the next review. (Subsequent review times are based on this.)
-    Training(unsigned new_lines_per_day = 1, std::time_t initial_increment = 20);
+    Training(unsigned new_lines_per_day = 2, std::time_t initial_increment = 20);
     // Returns false if no lines are available for training
     bool initialize(Database&, Color);
     // Returns true if the move is correct according to the current training line
