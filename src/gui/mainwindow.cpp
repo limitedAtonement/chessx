@@ -189,19 +189,24 @@ MainWindow::MainWindow() : QMainWindow(),
     connect(this, SIGNAL(reconfigure()), m_ficsConsole, SLOT(slotReconfigure()));
     m_ficsConsole->setEnabled(false);
 
+    DockWidgetEx* gameTimeDock = new DockWidgetEx(tr("Game Timeddd"), this);
+    gameTimeDock->setObjectName("GameTimeDock");
+    gameTimeDock->toggleViewAction()->setShortcut(Qt::CTRL | Qt::Key_W);
+    m_menuView->addAction(gameTimeDock->toggleViewAction());
+    m_gameToolBar = new GameToolBar(gameTimeDock);
+    gameTimeDock->adjustSize();
+    connect(m_gameToolBar, &GameToolBar::requestPly, this, &MainWindow::slotGameMoveToPly);
+    addDockWidget(Qt::RightDockWidgetArea, gameTimeDock);
+    gameTimeDock->setVisible(AppSettings->getValue("/MainWindow/GameToolBar").toBool());
+    gameTimeDock->setWidget(m_gameToolBar);
+
     /* Game view */
-    DockWidgetEx* gameTextDock = new DockWidgetEx(tr("Notation"), this);
+    DockWidgetEx* gameTextDock = new DockWidgetEx(tr("Notationnn"), this);
     gameTextDock->setObjectName("GameTextDock");
 
     m_gameWindow = new GameWindow(gameTextDock);
     connect(this, SIGNAL(reconfigure()), m_gameWindow, SLOT(slotReconfigure()));
-    m_gameToolBar = new GameToolBar(tr("Game Time"), m_gameWindow);
-    m_gameToolBar->setMovable(false);
-    m_gameWindow->addToolBar(Qt::BottomToolBarArea, m_gameToolBar);
-    connect(m_gameToolBar, &GameToolBar::requestPly, this, &MainWindow::slotGameMoveToPly);
 
-    m_menuView->addAction(m_gameToolBar->toggleViewAction());
-    m_gameToolBar->setVisible(AppSettings->getValue("/MainWindow/GameToolBar").toBool());
     m_gameView = m_gameWindow->browser();
     connect(m_gameView, &GameNotationWidget::anchorClicked, this, &MainWindow::slotGameViewLinkUrl);
     connect(m_gameView, &GameNotationWidget::actionRequested, this, &MainWindow::slotGameModify);

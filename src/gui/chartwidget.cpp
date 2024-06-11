@@ -26,16 +26,19 @@ ChartWidget::ChartWidget(QWidget *parent) :
     m_plyIndicator(0),
     m_lastSentIndicator(0)
 {
+    std::cout << "ChartWidget::ctor\n";
     setAutoFillBackground(true);
     setUpdatesEnabled(true);
 }
 
 ChartWidget::~ChartWidget()
 {
+    std::cout << "ChartWidget::dtor\n";
 }
 
 void ChartWidget::setValues(int line, const QList<double>& values)
 {
+    //std::cout << "ChartWidget::setValues " << line << " " << values.size() << "\n";
     if (line >= m_values.size())
     {
         QList<double> l;
@@ -51,6 +54,7 @@ void ChartWidget::setValues(int line, const QList<double>& values)
 
 void ChartWidget::setPly(int ply)
 {
+    //std::cout << "ChartWidget::setPly " << ply << "\n";
     m_ply = ply;
     updatePly();
     update();
@@ -58,6 +62,7 @@ void ChartWidget::setPly(int ply)
 
 void ChartWidget::paintEvent(QPaintEvent*)
 {
+    std::cout << "ChartWidget::paintEvent\n";
     QPainter painter(this);
     painter.setWindow(0,0,width(),height());
     painter.eraseRect(0,0,width(),height());
@@ -118,14 +123,17 @@ void ChartWidget::paintEvent(QPaintEvent*)
 
 void ChartWidget::resizeEvent(QResizeEvent*)
 {
+    std::cout << "ChartWidget::resize\n";
     updatePly();
     updatePolygons();
 }
 
 void ChartWidget::handleMouseEvent(QMouseEvent *event, bool deduplicate)
 {
+    std::cout << "ChartWidget::handleMouseEvent\n";
     if (!width() || !m_values.size() || (m_values[0].count()<2))
     {
+        std::cout << "   not width or something\n";
         return;
     }
     QPointF p = EVENT_POSITION(event);
@@ -134,9 +142,9 @@ void ChartWidget::handleMouseEvent(QMouseEvent *event, bool deduplicate)
     int move_index = static_cast<int>(x);
     if (deduplicate && m_lastSentIndicator==move_index)
     {
+        std::cout << "    deduplicating...\n";
         return;
     }
-    std::cout << "Requesting half move " << move_index << '\n';
     emit halfMoveRequested(move_index);
     m_lastSentIndicator = move_index;
 }
@@ -147,6 +155,7 @@ void ChartWidget::enterEvent(QEvent *event)
 void ChartWidget::enterEvent(QEnterEvent *event)
 #endif
 {
+    //std::cout << "ChartWidget::enterEvent\n";
     setCursor(QCursor(Qt::SplitHCursor));
     QWidget::enterEvent(event);
     m_lastSentIndicator = m_ply;
@@ -154,24 +163,28 @@ void ChartWidget::enterEvent(QEnterEvent *event)
 
 void ChartWidget::leaveEvent(QEvent *event)
 {
+    //std::cout << "ChartWidget::leaveEvent\n";
     unsetCursor();
     QWidget::leaveEvent(event);
 }
 
 void ChartWidget::mousePressEvent(QMouseEvent *event)
 {
+    std::cout << "ChartWidget::mousePressEvent\n";
     handleMouseEvent(event, false);
     QWidget::mousePressEvent(event);
 }
 
 void ChartWidget::mouseMoveEvent(QMouseEvent *event)
 {
+    std::cout << "ChartWidget::mouseMoveEvent\n";
     handleMouseEvent(event);
     QWidget::mouseMoveEvent(event);
 }
 
 void ChartWidget::updatePly()
 {
+    //std::cout << "ChartWidget::updatePly " << m_values.size() << "\n";
     if (m_values.size() && (m_values[0].count()>1))
     {
         double multiplierW = ((double)width()) / (m_values[0].count()-1);
@@ -185,6 +198,7 @@ void ChartWidget::updatePly()
 
 void ChartWidget::updatePolygon(int line)
 {
+    //std::cout << "ChartWidget::updatePolygon\n";
     if (line >= m_polygon.size())
     {
         m_polygon.insert(line, *new QPolygonF());
@@ -222,6 +236,7 @@ void ChartWidget::updatePolygon(int line)
 
 void ChartWidget::updatePolygons()
 {
+    std::cout << "ChartWidget::updatePolygons " << m_values.count() << "\n";
     for (int i=0; i<m_values.count();++i)
     {
         updatePolygon(i);
