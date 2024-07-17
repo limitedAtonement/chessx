@@ -177,6 +177,8 @@ add_library(database STATIC
   database/lichessopening.h
   database/lichessopeningdatabase.cpp
   database/lichessopeningdatabase.h
+  database/lichesstransfer.cpp
+  database/lichesstransfer.h
   database/memorydatabase.cpp
   database/memorydatabase.h
   database/networkhelper.cpp
@@ -321,6 +323,9 @@ add_library(gui STATIC
   dialogs/tagdialog.cpp
   dialogs/tagdialog.h
   dialogs/tagdialog.ui
+  dialogs/tournamentselectiondialog.cpp
+  dialogs/tournamentselectiondialog.h
+  dialogs/tournamentselectiondialog.ui
   gui/GameMimeData.h
   gui/analysiswidget.cpp
   gui/analysiswidget.h
