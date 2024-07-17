@@ -47,7 +47,7 @@ class FicsClient;
 class FicsConsole;
 class GameList;
 class GameNotationWidget;
-class GameToolBar;
+class CentipawnGraph;
 class GameWindow;
 class HistoryLabel;
 class OpeningTreeWidget;
@@ -703,7 +703,7 @@ private:
     QLabel* m_sliderText;
     QPointer<QComboBox> m_comboEngine;
     GameWindow* m_gameWindow;
-    GameToolBar* m_gameToolBar;
+    CentipawnGraph* m_centipawnGraph;
     QTabWidget* m_tabWidget;
     AnnotationWidget* annotationWidget;
     /* Status */

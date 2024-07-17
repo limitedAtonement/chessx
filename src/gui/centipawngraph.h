@@ -1,18 +1,19 @@
-#ifndef GAMETOOLBAR_H
-#define GAMETOOLBAR_H
+#ifndef CENTIPAWNGRAPH_H
+#define CENTIPAWNGRAPH_H
 
+#include <QWidget>
+#include <QString>
 #include "piece.h"
-#include "toolmainwindow.h"
 
 class QLCDNumber;
 class ChartWidget;
 
-class GameToolBar : public QWidget
+class CentipawnGraph : public QWidget
 {
     Q_OBJECT
 
 public:
-    GameToolBar(QWidget* parent = nullptr);
+    CentipawnGraph(QWidget* parent = nullptr);
 
 signals:
     void requestPly(int);

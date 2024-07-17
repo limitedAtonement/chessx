@@ -13,6 +13,7 @@
 #include "annotationwidget.h"
 #include "boardview.h"
 #include "boardviewex.h"
+#include "centipawngraph.h"
 #include "chessxsettings.h"
 #include "clipboarddatabase.h"
 #include "commentdialog.h"
@@ -32,7 +33,6 @@
 #include "gamelist.h"
 #include "GameMimeData.h"
 #include "gamewindow.h"
-#include "gametoolbar.h"
 #include "gamenotationwidget.h"
 #include "helpbrowsershell.h"
 #include "historylabel.h"
@@ -93,7 +93,7 @@ MainWindow::MainWindow() : QMainWindow(),
     m_tabDragIndex(-1),
     m_pDragTabBar(nullptr),
     m_gameWindow(nullptr),
-    m_gameToolBar(0),
+    m_centipawnGraph(nullptr),
     m_operationFlag(0),
     m_currentFrom(InvalidSquare),
     m_currentTo(InvalidSquare),
@@ -193,12 +193,12 @@ MainWindow::MainWindow() : QMainWindow(),
     gameTimeDock->setObjectName("GameTimeDock");
     gameTimeDock->toggleViewAction()->setShortcut(Qt::CTRL | Qt::Key_W);
     m_menuView->addAction(gameTimeDock->toggleViewAction());
-    m_gameToolBar = new GameToolBar(gameTimeDock);
+    m_centipawnGraph = new CentipawnGraph(gameTimeDock);
     gameTimeDock->adjustSize();
-    connect(m_gameToolBar, &GameToolBar::requestPly, this, &MainWindow::slotGameMoveToPly);
+    connect(m_centipawnGraph, &CentipawnGraph::requestPly, this, &MainWindow::slotGameMoveToPly);
     addDockWidget(Qt::RightDockWidgetArea, gameTimeDock);
-    gameTimeDock->setVisible(AppSettings->getValue("/MainWindow/GameToolBar").toBool());
-    gameTimeDock->setWidget(m_gameToolBar);
+    gameTimeDock->setVisible(AppSettings->getValue("/MainWindow/CentipawnGraph").toBool());
+    gameTimeDock->setWidget(m_centipawnGraph);
 
     /* Game view */
     DockWidgetEx* gameTextDock = new DockWidgetEx(tr("Notationnn"), this);
@@ -664,7 +664,7 @@ void MainWindow::closeEvent(QCloseEvent* e)
         AppSettings->setLayout(this);
         AppSettings->beginGroup("/MainWindow/");
         AppSettings->setValue("BoardSplit", m_boardSplitter->saveState());
-        AppSettings->setValue("GameToolBar", m_gameToolBar->isVisible());
+        AppSettings->setValue("CentipawnGraph", m_centipawnGraph->isVisible());
         AppSettings->endGroup();
     }
     else
@@ -1855,7 +1855,6 @@ void MainWindow::setupActions()
     QMenu *gameMenu = menuBar()->addMenu(tr("&Game"));
     gameToolBar = addToolBar(tr("Game"));
     gameToolBar->setObjectName("GameToolBarMain");
-    
     dbToolBar = addToolBar(tr("Database"));
     dbToolBar->setObjectName("DbToolBarMain");
 
@@ -1902,10 +1901,8 @@ void MainWindow::setupActions()
     gameToolBar->addSeparator();
 
     autoGroup = new ExclusiveActionGroup(this);
-
     m_match = createAction(tr("Match"), SLOT(slotToggleGameMode()), Qt::CTRL | Qt::Key_M, gameToolBar, ":/images/black_chess.png");
     m_match->setCheckable(true);
-
     autoGroup->addAction(m_match);
     gameMenu->addAction(m_match);
     gameMenu->addSeparator();

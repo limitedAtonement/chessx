@@ -38,7 +38,7 @@
 #include "gameid.h"
 #include "gamelist.h"
 #include "gamenotationwidget.h"
-#include "gametoolbar.h"
+#include "centipawngraph.h"
 #include "gamewindow.h"
 #include "GameMimeData.h"
 #include "historylabel.h"
@@ -393,8 +393,8 @@ void MainWindow::UpdateMaterialWidget()
 {
     if(databaseInfo())
     {
-        m_gameToolBar->slotDisplayMaterial(databaseInfo()->material());
-        m_gameToolBar->slotDisplayEvaluations(databaseInfo()->evaluations());
+        m_centipawnGraph->slotDisplayMaterial(databaseInfo()->material());
+        m_centipawnGraph->slotDisplayEvaluations(databaseInfo()->evaluations());
     }
 }
 
@@ -1331,20 +1331,20 @@ void MainWindow::moveChanged()
     auto timeThat = g.timeAnnotation(m, GameX::AfterMove);
     if (g.board().toMove() == White)
     {
-        m_gameToolBar->slotDisplayTime(White, timeThis);
-        m_gameToolBar->slotDisplayTime(Black, timeThat);
+        m_centipawnGraph->slotDisplayTime(White, timeThis);
+        m_centipawnGraph->slotDisplayTime(Black, timeThat);
     }
     else
     {
-        m_gameToolBar->slotDisplayTime(Black, timeThis);
-        m_gameToolBar->slotDisplayTime(White, timeThat);
+        m_centipawnGraph->slotDisplayTime(Black, timeThis);
+        m_centipawnGraph->slotDisplayTime(White, timeThat);
     }
 
     // Highlight current move
     m_gameView->showMove(m);
     if (g.isMainline())
     {
-        m_gameToolBar->slotDisplayCurrentPly(g.ply());
+        m_centipawnGraph->slotDisplayCurrentPly(g.ply());
     }
 
     displayVariations();

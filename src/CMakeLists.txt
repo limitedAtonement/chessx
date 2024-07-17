@@ -347,6 +347,8 @@ add_library(gui STATIC
   gui/boardviewex.cpp
   gui/boardviewex.h
   gui/boardviewex.ui
+  gui/centipawngraph.cpp
+  gui/centipawngraph.h
   gui/chartwidget.cpp
   gui/chartwidget.h
   gui/chessbrowser.cpp
@@ -388,8 +390,6 @@ add_library(gui STATIC
   gui/gamelistsortmodel.h
   gui/gamenotationwidget.cpp
   gui/gamenotationwidget.h
-  gui/gametoolbar.cpp
-  gui/gametoolbar.h
   gui/gamewindow.cpp
   gui/gamewindow.h
   gui/gamewindow.ui

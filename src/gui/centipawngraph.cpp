@@ -1,4 +1,4 @@
-#include "gametoolbar.h"
+#include "centipawngraph.h"
 
 #include <QLCDNumber>
 #include <QGridLayout>
@@ -7,15 +7,15 @@
 
 #include "chartwidget.h"
 
-GameToolBar::GameToolBar(QWidget* parent)
+CentipawnGraph::CentipawnGraph(QWidget* parent)
     : QWidget(parent)
     , m_clock1(nullptr)
     , m_clock2(nullptr)
     , m_chart(nullptr)
 {
-    setObjectName("GameToolBar");
+    setObjectName("CentipawnGraph");
 
-    std::cout << "GameToolBar Constructor\n";
+    std::cout << "CentipawnGraph Constructor\n";
     QGridLayout * layout = new QGridLayout(this);
     m_clock1 = new QLCDNumber(7);
     m_clock1->setSegmentStyle(QLCDNumber::Flat);
@@ -39,8 +39,8 @@ GameToolBar::GameToolBar(QWidget* parent)
     //m_clock1->setStyleSheet("border: 1px solid red");
     layout->addWidget(m_clock2, 1, 2);
     //setStyleSheet("border: 1px solid blue");
-    connect(m_chart, &ChartWidget::halfMoveRequested, this, &GameToolBar::requestPly);
-    std::cout << "GameToolBar Constructor connected\n";
+    connect(m_chart, &ChartWidget::halfMoveRequested, this, &CentipawnGraph::requestPly);
+    std::cout << "CentipawnGraph Constructor connected\n";
     adjustSize();
 }
 
@@ -49,18 +49,18 @@ static void printDimensions(QRect const & re)
     std::cout << "  left " << re.left() << " top " << re.top() << " right " << re.right() << " bottom " << re.bottom() << '\n';
 }
 
-void GameToolBar::slotDisplayCurrentPly(int ply)
+void CentipawnGraph::slotDisplayCurrentPly(int ply)
 {
-    std::cout << "GameToolBar layout geometry ";
+    std::cout << "CentipawnGraph layout geometry ";
     printDimensions(layout()->geometry());
-    std::cout << "GameToolBar geometry        ";
+    std::cout << "CentipawnGraph geometry        ";
     printDimensions(geometry());
     std::cout << "  minimum size " << minimumSize().width() << ',' << minimumSize().height() << '\n';
     std::cout << "  maximum size " << maximumSize().width() << ',' << maximumSize().height() << '\n';
     std::cout << "  size hint " << sizeHint().width() << ',' << sizeHint().height() << '\n';
     std::cout << "  minimumsize hint " << minimumSizeHint().width() << ',' << minimumSizeHint().height() << '\n';
     updateGeometry();
-    //std::cout << "GameToolBar slotdisplaycurrentply " << ply << "\n";
+    //std::cout << "CentipawnGraph slotdisplaycurrentply " << ply << "\n";
     m_chart->setPly(ply);
     m_clock1->show();
     m_clock1->setVisible(true);
@@ -75,28 +75,28 @@ void GameToolBar::slotDisplayCurrentPly(int ply)
     printDimensions(m_clock2->frameGeometry());
 }
 
-void GameToolBar::slotDisplayMaterial(const QList<double>& material)
+void CentipawnGraph::slotDisplayMaterial(const QList<double>& material)
 {
-    //std::cout << "GameToolBar slotDisplayMaterial " << material.size() << "\n";
+    //std::cout << "CentipawnGraph slotDisplayMaterial " << material.size() << "\n";
     m_chart->setValues(0, material);
 }
 
-void GameToolBar::slotDisplayEvaluations(const QList<double>& evaluations)
+void CentipawnGraph::slotDisplayEvaluations(const QList<double>& evaluations)
 {
-    //std::cout << "GameToolBar slotDisplayEvaluations " << evaluations.size() << "\n";
+    //std::cout << "CentipawnGraph slotDisplayEvaluations " << evaluations.size() << "\n";
     m_chart->setValues(1, evaluations);
 }
 
-void GameToolBar::slotDisplayTime(const QString& timeWhite, const QString &timeBlack)
+void CentipawnGraph::slotDisplayTime(const QString& timeWhite, const QString &timeBlack)
 {
-    //std::cout << "GameToolBar slotDisplayTime: " << timeWhite.toStdString() << "\n";
+    //std::cout << "CentipawnGraph slotDisplayTime: " << timeWhite.toStdString() << "\n";
     m_clock1->display(timeWhite);
     m_clock2->display(timeBlack);
 }
 
-void GameToolBar::slotDisplayTime(Color color, const QString& text)
+void CentipawnGraph::slotDisplayTime(Color color, const QString& text)
 {
-    //std::cout << "GameToolBar slotDisplayTime with color: " << text.toStdString() << "\n";
+    //std::cout << "CentipawnGraph slotDisplayTime with color: " << text.toStdString() << "\n";
     switch (color)
     {
     case White:
@@ -110,7 +110,7 @@ void GameToolBar::slotDisplayTime(Color color, const QString& text)
     }
 }
 
-QSize GameToolBar::sizeHint() const
+QSize CentipawnGraph::sizeHint() const
 {
     return {300, 101};
 }
