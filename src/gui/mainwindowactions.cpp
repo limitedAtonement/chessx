@@ -4449,3 +4449,10 @@ void MainWindow::delaySpeechTimeout()
 }
 
 #endif
+
+void MainWindow::slotStartAnalysisRequested()
+{
+    if (!m_centipawnGraph)
+        return;
+    m_centipawnGraph->startAnalysis(game());
+}

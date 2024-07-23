@@ -609,6 +609,8 @@ private slots:
     void slotVersionFound(int major, int minor, int build);
     void slotUpdateOpeningTreeWidget();
     void slotDatabaseEditTag();
+    void slotStartAnalysisRequested();
+
 private:
     /** Create single menu action. */
     QAction* createAction(QString name, const char* slot, const QKeySequence& key = QKeySequence(),

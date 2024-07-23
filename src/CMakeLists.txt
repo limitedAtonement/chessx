@@ -95,6 +95,8 @@ add_library(database-core STATIC
   database/gameid.h
   database/gamecursor.cpp
   database/gamecursor.h
+  database/gameevaluation.cpp
+  database/gameevaluation.h
   database/gamex.cpp
   database/gamex.h
   database/index.cpp

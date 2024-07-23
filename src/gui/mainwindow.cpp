@@ -199,6 +199,7 @@ MainWindow::MainWindow() : QMainWindow(),
     addDockWidget(Qt::RightDockWidgetArea, gameTimeDock);
     gameTimeDock->setVisible(AppSettings->getValue("/MainWindow/CentipawnGraph").toBool());
     gameTimeDock->setWidget(m_centipawnGraph);
+    connect(m_centipawnGraph, &CentipawnGraph::startAnalysisRequested, this, &MainWindow::slotStartAnalysisRequested);
 
     /* Game view */
     DockWidgetEx* gameTextDock = new DockWidgetEx(tr("Notationnn"), this);
