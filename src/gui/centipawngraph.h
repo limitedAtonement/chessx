@@ -42,6 +42,8 @@ private:
     ChartWidget* m_chart;
     QPushButton* m_startAnalysis;
     GameEvaluation * evaluation;
+    GameX currentGame;
+    QList<double> scores;
 
 private slots:
     void analysisRequested(bool) noexcept;

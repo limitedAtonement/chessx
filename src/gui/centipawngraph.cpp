@@ -5,7 +5,6 @@
 #include <iostream>
 #include <QPainter>
 #include <QPushButton>
-#include <thread>
 
 #include "chartwidget.h"
 #include "gameevaluation.h"
@@ -93,7 +92,7 @@ void CentipawnGraph::slotDisplayMaterial(const QList<double>& material)
 
 void CentipawnGraph::slotDisplayEvaluations(const QList<double>& evaluations)
 {
-    // If we don't have a compted evaluation, use this one retrieved from annotations.
+    // If we don't have a computed evaluation, use this one retrieved from annotations.
     //std::cout << "CentipawnGraph slotDisplayEvaluations " << evaluations.size() << "\n";
     m_chart->setValues(1, evaluations);
 }
@@ -137,8 +136,6 @@ void CentipawnGraph::analysisRequested(bool /*checked*/) noexcept
 
 void CentipawnGraph::startAnalysis(GameX const & game) noexcept
 {
-    //std::cout << "CentipawnGraph::startAnalysis with game...\n";
-    std::this_thread::sleep_for(std::chrono::milliseconds(25));
     try
     {
         if (evaluation)
@@ -149,11 +146,16 @@ void CentipawnGraph::startAnalysis(GameX const & game) noexcept
         evaluation = new GameEvaluation{0, 1000, game};
         connect(evaluation, &GameEvaluation::evaluationChanged, this, &CentipawnGraph::evaluationChanged);
         connect(evaluation, &GameEvaluation::evaluationComplete, this, &CentipawnGraph::evaluationComplete);
-        //std::cout << "   calling start...\n";
+        currentGame = game;
+        scores.clear();
+        scores.reserve(currentGame.cursor().countMoves());
+        for (unsigned i{0}; i < currentGame.cursor().countMoves(); ++i)
+            scores << 0;
         evaluation->start();
     }
     catch (...)
     {
+        std::cout << "Failed to start evaluation\n";
         // Failed to start evaluation; swallowing error
     }
 }
@@ -170,8 +172,20 @@ void CentipawnGraph::evaluationComplete() noexcept
     evaluation = nullptr;
 }
 
-void CentipawnGraph::evaluationChanged(std::unordered_map<MoveId, double> const &) noexcept
+void CentipawnGraph::evaluationChanged(std::unordered_map<MoveId, double> const & scoreUpdates) noexcept
 {
-    std::cout << "CentipawnGraph Got new evaluations\n";
+    GameX tempGame{currentGame};
+    tempGame.moveToStart();
+    for (std::pair<MoveId, double> const & score : scoreUpdates)
+    {
+        int moveNumber = currentGame.moveNumber(score.first);
+        if (scores.size() <= moveNumber)
+        {
+            std::cout << "OUT OF RANGE\n";
+            continue;
+        }
+        scores.replace(moveNumber, score.second);
+    }
+    m_chart->setValues(1, scores);
 }
 

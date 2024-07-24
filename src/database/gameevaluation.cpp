@@ -13,7 +13,7 @@ GameEvaluation::GameEvaluation(int engineIndex, int msPerMove, GameX game) noexc
 
 void GameEvaluation::start()
 {
-    std::cout << "GameEvaluation::start...\n";
+    std::cerr << "GameEvaluation::start... thread " << QThread::currentThread()->objectName().toStdString() << "\n";
     if (running)
     {
         throw std::logic_error{"Game evaluation already running"};
@@ -22,12 +22,15 @@ void GameEvaluation::start()
     GameX gameCopy {game};
     gameCopy.moveToStart();
     workers.clear();
+    workers.reserve(gameCopy.cursor().countMoves());
     QString line {""};
+    unsigned count{0};
     do
     {
         try
         {
-            workers.emplace_back(engineIndex, gameCopy.startingBoard(), gameCopy.board(), msPerMove, gameCopy.currentMove(), line);
+            workers.push_back(std::make_unique<GameEvaluationWorker>(engineIndex, gameCopy.startingBoard(),
+                    gameCopy.board(), msPerMove, gameCopy.currentMove(), line, count));
         }
         catch (...)
         {
@@ -42,7 +45,6 @@ void GameEvaluation::start()
         // See gamecursor.cpp::moveToId(MoveId, QString*)
         line.push_back(gameCopy.move().toAlgebraic());
         line.push_back(" ");
-        break;
     } while(true);
     timer.stop();
     timer.start(std::chrono::milliseconds{100});
@@ -51,23 +53,25 @@ void GameEvaluation::start()
 
 void GameEvaluation::update() noexcept
 {
-    std::cout << "GameEvaluation::updated...\n";
     std::unordered_map<MoveId, double> evaluations;
     for (unsigned i{0}; i < workers.size(); ++i)
     {
-        GameEvaluationWorker & worker = workers[i];
-        evaluations.emplace(worker.getMove(), worker.getLastScore());
-        if (!worker.isRunning())
+        GameEvaluationWorker_ptr & worker {workers[i]};
+        worker->update();
+        evaluations.emplace(worker->getMove(), worker->getLastScore());
+        if (!worker->isRunning())
         {
             // Erase *after* getting the value because erasing will destroy the worker
             workers.erase(workers.begin()+i);
         }
     }
+    std::cerr << "GameEvaluation::update... workers size " << workers.size() << " thread " << QThread::currentThread()->objectName().toStdString() << "\n";
     emit evaluationChanged(evaluations);
     if (!workers.size())
     {
         timer.stop();
-        running=false;
+        emit evaluationComplete();
+        running = false;
     }
 }
 
@@ -75,24 +79,30 @@ void GameEvaluation::stop() noexcept
 {
     workers.clear();
     timer.stop();
-    running = false;
+    emit evaluationComplete();
 }
 
 GameEvaluation::~GameEvaluation() noexcept
 {
-    stop();
+    workers.clear();
+    timer.stop();
 }
 
 GameEvaluationWorker::GameEvaluationWorker(int engineIndex, BoardX const & startPosition, BoardX const & currentPosition,
-        int msPerMove, MoveId move, QString const & line)
-    : startPosition{startPosition}
+        int msPerMove, MoveId move, QString const & line, int num)
+    : num{num}
+    , startPosition{startPosition}
     , currentPosition{currentPosition}
     , msPerMove{msPerMove}
     , move{move}
     , line{line}
     , engine{EngineX::newEngine(engineIndex)}
 {
-    std::cout << "GameEvaluationWorker::GameEvaluationWorker\n";
+    setObjectName("evaluationworker" + std::to_string(num));
+    std::cerr << "GameEvaluationWorker::GameEvaluationWorker " << num << " engine " << engine << " thread " <<
+        QThread::currentThread()->objectName().toStdString() << "\n";
+    QThread::currentThread()->setObjectName("MAAIIIN" + std::to_string(num));
+    std::cerr << "    changed thread name to " << QThread::currentThread()->objectName().toStdString() << "\n";
     if (!engine)
     {
         throw std::runtime_error{"Failed to instantiate engine"};
@@ -103,42 +113,37 @@ GameEvaluationWorker::GameEvaluationWorker(int engineIndex, BoardX const & start
     }
     engine->m_mapOptionValues["Threads"] = 1;
     engine->setStartPos(startPosition);
-    connect(engine, &EngineX::activated, this, &GameEvaluationWorker::engineActivated);
-    connect(engine, &EngineX::deactivated, this, &GameEvaluationWorker::engineDeactivated);
-    connect(engine, &EngineX::error, this, &GameEvaluationWorker::engineError);
-    connect(engine, &EngineX::analysisStarted, this, &GameEvaluationWorker::engineAnalysisStarted);
-    connect(engine, &EngineX::analysisStopped, this, &GameEvaluationWorker::engineAnalysisStopped);
-    connect(engine, &EngineX::analysisUpdated, this, &GameEvaluationWorker::engineAnalysisUpdated);
-    connect(engine, &EngineX::logUpdated, this, &GameEvaluationWorker::engineLogUpdated);
+    engine->setObjectName("engineforworker" + std::to_string(num));
+    std::cerr << "    " << num << " Connecting to engine " << engine << '\n';
+    connect(engine, SIGNAL(activated()), this, SLOT(engineActivated()));
+    connect(engine, SIGNAL(deactivated()), this, SLOT(engineDeactivated()));
+    connect(engine, SIGNAL(error(QProcess::ProcessError)), this, SLOT(engineError(QProcess::ProcessError)));
+    connect(engine, SIGNAL(analysisStarted()), this, SLOT(engineAnalysisStarted()));
+    connect(engine, SIGNAL(analysisStopped()), this, SLOT(engineAnalysisStopped()));
+    connect(engine, SIGNAL(analysisUpdated(Analysis const &)), this, SLOT(engineAnalysisUpdated(Analysis const&)));
+    connect(engine, SIGNAL(logUpdated()), this, SLOT(engineLogUpdated()));
     engine->activate();
     running = true;
-    std::cout << "    activated engine\n";
-}
-
-GameEvaluationWorker & GameEvaluationWorker::operator=(GameEvaluationWorker && other) noexcept
-{
-    this->move = other.move;
-    std::swap(this->line, other.line);
-    return *this;
+    std::cerr << "    " << num << " activated engine\n";
 }
 
 GameEvaluationWorker::~GameEvaluationWorker() noexcept
 {
-    std::cout << "~GameEvalutaionworker; engine is " << engine << '\n';
     if (!engine)
     {
         return;
     }
     try
     {
-        std::cout << "    stopping analysis...\n";
+        std::cerr << "~GameEvalutaionworker; " << num << " engine is " << engine << '\n';
+        std::cerr << "    stopping analysis...\n";
         engine->stopAnalysis();
-        std::cout << "    deleting engine\n";
+        std::cerr << "    deleting engine\n";
         delete engine;
     }
     catch (...)
     {
-        std::cout << "    ~GameEvaluationWorker caught exception\n";
+        std::cerr << "    ~GameEvaluationWorker caught exception\n";
         // I don't think we can do anything about this exception.
     }
 }
@@ -148,54 +153,43 @@ MoveId GameEvaluationWorker::getMove() const noexcept
     return move;
 }
 
-GameEvaluationWorker::GameEvaluationWorker(GameEvaluationWorker && other) noexcept
-    : startPosition{std::move(other.startPosition)}
-    , currentPosition{std::move(other.currentPosition)}
-    , msPerMove{other.msPerMove}
-    , move{other.move}
-    , line{std::move(other.line)}
-    , engine{other.engine}
-{
-    std::cout << "GameEvaluationWorker copy cctor \n";
-    other.engine = nullptr;
-}
-
 void GameEvaluationWorker::engineActivated()
 {
-    std::cout << "Engine activated event received; starting analysis...\n";
+    std::cerr << num << " EVENT: Engine activated; starting analysis... thread " << QThread::currentThread()->objectName().toStdString() << "\n";
     EngineParameter parameters {msPerMove};
     engine->startAnalysis(currentPosition, 1, parameters, false, "");
 }
 
 void GameEvaluationWorker::engineDeactivated()
 {
-    std::cout << "engine deactivated event received\n";
+    std::cerr << num << " EVENT: engine deactivated thread " << QThread::currentThread()->objectName().toStdString() << "\n";
 }
 
 void GameEvaluationWorker::engineError(QProcess::ProcessError)
 {
-    std::cout << "engine error event received\n";
+    std::cerr << num << " EVENT: engine error thread " << QThread::currentThread()->objectName().toStdString() << "\n";
 }
 
 void GameEvaluationWorker::engineAnalysisStarted()
 {
-    std::cout << " analysis started event received\n";
+    std::cerr << num << " EVENT:  analysis started thread " << QThread::currentThread()->objectName().toStdString() << "\n";
+    startTimestamp = QDateTime::currentDateTimeUtc();
 }
 
 void GameEvaluationWorker::engineAnalysisStopped()
 {
-    std::cout << "analysis stopped event received\n";
+    std::cerr << num << " EVENT: analysis stopped thread " << QThread::currentThread()->objectName().toStdString() << "\n";
 }
 
 void GameEvaluationWorker::engineAnalysisUpdated(Analysis const & analysis)
 {
     lastScore = analysis.fscore();
-    std::cout << "analysis updated. event received\n";
+    std::cerr << num << " EVENT: analysis updated. score " << lastScore << " thread " << QThread::currentThread()->objectName().toStdString() << "\n";
 }
 
 void GameEvaluationWorker::engineLogUpdated()
 {
-    std::cout << "log updated event received\n";
+    std::cerr << num << " EVENT: log updated thread " << QThread::currentThread()->objectName().toStdString() << "\n";
 }
 
 double GameEvaluationWorker::getLastScore() const noexcept
@@ -206,4 +200,23 @@ double GameEvaluationWorker::getLastScore() const noexcept
 bool GameEvaluationWorker::isRunning() const noexcept
 {
     return running;
+}
+
+void GameEvaluationWorker::update() noexcept
+{
+    std::cerr << num << " GameEvaluationWorker::update\n";
+    if (!startTimestamp)
+    {
+        // Maybe have a timeout and kill the engine if analysis still hasn't started?
+        std::cerr << num << " worker update called before starting, skipping...\n";
+        return;
+    }
+    std::cerr << num << " Worker update called, checking time... ms run " << startTimestamp->msecsTo(QDateTime::currentDateTimeUtc()) << " thread " << QThread::currentThread()->objectName().toStdString() << "\n";
+    std::cerr << "    start time " << startTimestamp->toString().toStdString() << '\n';
+    if (startTimestamp->msecsTo(QDateTime::currentDateTimeUtc()) < msPerMove)
+        return;
+    engine->deactivate();
+    running = false;
+    // We'll let the destructor delete the engine since this is called during computation when
+    // processing time is more premium than later.
 }

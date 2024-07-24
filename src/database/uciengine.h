@@ -78,6 +78,8 @@ private:
     bool m_chess960;
     QString m_waitingOn;
     bool m_quitAfterAnalysis;
+    int num;
+    static int nums;
 };
 
 #endif // UCIENGINE_H_INCLUDED

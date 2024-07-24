@@ -18,6 +18,7 @@ public:
     virtual ~ChartWidget();
 
     void setValues(int line, const QList<double> &values);
+    void setValue(int line, const QList<double> &values);
     void setPly(int ply);
 
 signals:

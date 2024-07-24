@@ -12,19 +12,24 @@
 
 */
 
+using GameEvaluationWorker_ptr = std::unique_ptr<class GameEvaluationWorker>;
 class GameEvaluationWorker final : public QObject
 {
     Q_OBJECT
 public:
     GameEvaluationWorker(int engineIndex, BoardX const & startPosition, BoardX const & currentPosition,
-            int msPerMove, MoveId move, QString const & line);
-    GameEvaluationWorker & operator=(GameEvaluationWorker &&) noexcept;
-    GameEvaluationWorker(GameEvaluationWorker&&)noexcept;
+            int msPerMove, MoveId move, QString const & line, int num);
+    // QObjects can't be copied or moved
+    GameEvaluationWorker & operator=(GameEvaluationWorker &&) = delete;
+    GameEvaluationWorker(GameEvaluationWorker&&) = delete;
     ~GameEvaluationWorker() noexcept;
+
     MoveId getMove() const noexcept;
     double getLastScore() const noexcept;
     bool isRunning() const noexcept;
+    void update() noexcept;
 
+    int const num;
 //signals:
     //void evaluationChanged(MoveId move, double scorePawns);
 
@@ -37,6 +42,7 @@ private:
     EngineX * engine;
     double lastScore{0};
     bool running{false};
+    std::optional<QDateTime> startTimestamp;
 
 private slots:
     void engineActivated();
@@ -71,7 +77,7 @@ private:
     QTimer timer;
 
     bool running{false};
-    std::vector<GameEvaluationWorker> workers;
+    std::vector<GameEvaluationWorker_ptr> workers;
     void update() noexcept;
 
 private slots:

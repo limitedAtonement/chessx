@@ -8,6 +8,7 @@
  *   (at your option) any later version.                                   *
  ***************************************************************************/
 
+#include <iostream>
 #include "enginedata.h"
 #include "qt6compat.h"
 #include "uciengine.h"
@@ -18,12 +19,13 @@
 #define new DEBUG_NEW
 #endif // _MSC_VER
 
+int UCIEngine::nums{0};
 UCIEngine::UCIEngine(const QString& name,
                      const QString& command,
                      bool bTestMode,
                      const QString& directory,
                      bool log,
-                     bool sendHistory) : EngineX(name, command, bTestMode, directory, log, sendHistory)
+                     bool sendHistory) : EngineX(name, command, bTestMode, directory, log, sendHistory), num{++nums}
 {
     m_quitAfterAnalysis = false;
     m_chess960 = false;
@@ -36,6 +38,7 @@ void UCIEngine::setStartPos(const BoardX& startPos)
 
 bool UCIEngine::startAnalysis(const BoardX& board, int nv, const EngineParameter &mt, bool bNewGame, QString line)
 {
+    std::cerr << num << " uciengine starting analysis\n";
     EngineX::setMoveTime(mt);
     m_mpv = nv;
     if(!isActive())
@@ -122,6 +125,7 @@ void UCIEngine::setMoveTime(const EngineParameter &mt)
 
 void UCIEngine::protocolStart()
 {
+    std::cerr << num << " UCIEngine::protocolStart\n";
     //tell the engine we are using the uci protocol
     send("uci");
 }
@@ -197,6 +201,7 @@ void UCIEngine::setPosition()
 
 void UCIEngine::processMessage(const QString& message)
 {
+    //std::cerr << num << " UCIEngine::processMessage " << message.toStdString() << '\n';
     if(message == "uciok")
     {
         //once the engine is running wait for it to initialise
@@ -217,8 +222,10 @@ void UCIEngine::processMessage(const QString& message)
     }
     if(message == "readyok")
     {
+        std::cerr << num << "    readyok received\n";
         if(m_waitingOn == "uciok")
         {
+            std::cerr << num << "       waiting on uciok, setting active! test mode " << m_bTestMode << "\n";
             //engine is now initialised and ready to go
             m_waitingOn = "";
             setActive(true);
@@ -230,6 +237,7 @@ void UCIEngine::processMessage(const QString& message)
                 {
                     QString key = i.key();
                     QVariant value = i.value();
+                    //std::cerr << num << "       got option value " << key.toStdString() << " value " << value.toInt() << '\n';
                     if(EngineOptionData* dataSpec = EngineOptionData::FindInList(key, m_options))
                     {
                         if ((dataSpec->m_name != "UCI_Chess960") && (dataSpec->m_name != "MultiPV") && (dataSpec->m_name != "UCI_AnalyseMode"))

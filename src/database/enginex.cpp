@@ -9,6 +9,7 @@
  ***************************************************************************/
 
 #include <QProcess>
+#include <iostream>
 
 #include "settings.h"
 #include "enginex.h"
@@ -136,6 +137,7 @@ EngineX::~EngineX()
 
 void EngineX::activate()
 {
+    std::cerr << "activating engine... engine " << this << "\n";
     if(m_process)
     {
         return;
@@ -144,6 +146,7 @@ void EngineX::activate()
     m_process = new QProcess(this);
     if(m_process)
     {
+        std::cerr <<"   created new process\n";
         m_process->setReadChannel(QProcess::StandardOutput);
         if(!m_directory.isEmpty())
         {
@@ -162,6 +165,7 @@ void EngineX::activate()
         parameters.pop_front();
         m_process->start(cmd, parameters);
     }
+    std::cerr << "finished activating engine... engine " << this << "\n";
 }
 
 void EngineX::deactivate()
@@ -205,11 +209,14 @@ void EngineX::setActive(bool active)
 {
     if(active && !m_active)
     {
+        std::cerr << "EngineX::setActive emitting activated; this is " << this << "\n";
         m_active = true;
         emit activated();
+        std::cerr << "EngineX::setActive emmitttteeddd activated\n";
     }
     else
     {
+        std::cerr << "EngineX::setActive NOT emitting activated\n";
         if(!active && m_active)
         {
             setAnalyzing(false);
@@ -264,7 +271,7 @@ void EngineX::setMoveTime(const EngineParameter& mt)
 void EngineX::pollProcess()
 {
     QString message;
-
+    std::cerr << "Enginx::pollProcess... engine " << this << "\n";
     while(m_process && m_process->canReadLine())
     {
         message = m_process->readLine().simplified();
@@ -274,10 +281,12 @@ void EngineX::pollProcess()
         }
         processMessage(message);
     }
+    std::cerr << "Enginx::pollProcess finished\n";
 }
 
 void EngineX::processError(QProcess::ProcessError errMsg)
 {
+    std::cerr << "EngineX::processError " << this << "\n";
     setActive(false);
     m_process = nullptr;
     emit error(errMsg);
@@ -328,6 +337,7 @@ void EngineX::setAllowEngineOutput(bool allow)
 
 void EngineX::processExited()
 {
+    std::cerr << "Enginx::processExited\n";
     setActive(false);
     m_process = nullptr;
     emit deactivated();
