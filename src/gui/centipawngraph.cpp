@@ -149,7 +149,7 @@ void CentipawnGraph::startAnalysis(GameX const & game) noexcept
         currentGame = game;
         scores.clear();
         scores.reserve(currentGame.cursor().countMoves());
-        for (unsigned i{0}; i < currentGame.cursor().countMoves(); ++i)
+        for (int i{0}; i < currentGame.cursor().countMoves(); ++i)
             scores << 0;
         evaluation->start();
     }
@@ -176,9 +176,11 @@ void CentipawnGraph::evaluationChanged(std::unordered_map<MoveId, double> const 
 {
     GameX tempGame{currentGame};
     tempGame.moveToStart();
+    std::cout << "got " << scoreUpdates.size() << " score updates...";
     for (std::pair<MoveId, double> const & score : scoreUpdates)
     {
         int moveNumber = currentGame.moveNumber(score.first);
+        //std::cout << moveNumber << ":" << score.second << ";";
         if (scores.size() <= moveNumber)
         {
             std::cout << "OUT OF RANGE\n";
@@ -186,6 +188,14 @@ void CentipawnGraph::evaluationChanged(std::unordered_map<MoveId, double> const 
         }
         scores.replace(moveNumber, score.second);
     }
+    std::cout << "\nnew scores:";
+    std::cout.setf(std::ios::fixed);
+    std::cout.precision(2);
+    for (double s : scores)
+    {
+        std::cout << s << ',';
+    }
+    std::cout << '\n';
     m_chart->setValues(1, scores);
 }
 

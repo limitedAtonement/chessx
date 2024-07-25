@@ -45,6 +45,8 @@ void GameEvaluation::start()
         // See gamecursor.cpp::moveToId(MoveId, QString*)
         line.push_back(gameCopy.move().toAlgebraic());
         line.push_back(" ");
+        if (count++ > 10)
+            break;
     } while(true);
     timer.stop();
     timer.start(std::chrono::milliseconds{100});
@@ -183,8 +185,16 @@ void GameEvaluationWorker::engineAnalysisStopped()
 
 void GameEvaluationWorker::engineAnalysisUpdated(Analysis const & analysis)
 {
+    if (analysis.bestMove())
+    {
+        // When the engine reports a best move, no score is reported, so we skip it
+        return;
+    }
     lastScore = analysis.fscore();
-    std::cerr << num << " EVENT: analysis updated. score " << lastScore << " thread " << QThread::currentThread()->objectName().toStdString() << "\n";
+    std::cerr << num << " EVENT: analysis updated. move " << move << " score " << lastScore << " bestmove " <<
+        analysis.bestMove() <<" depth " << analysis.depth() << "\n";
+    if (lastScore == 0.0)
+        std::cerr << "Zero!?\n";
 }
 
 void GameEvaluationWorker::engineLogUpdated()
@@ -204,15 +214,13 @@ bool GameEvaluationWorker::isRunning() const noexcept
 
 void GameEvaluationWorker::update() noexcept
 {
-    std::cerr << num << " GameEvaluationWorker::update\n";
     if (!startTimestamp)
     {
         // Maybe have a timeout and kill the engine if analysis still hasn't started?
         std::cerr << num << " worker update called before starting, skipping...\n";
         return;
     }
-    std::cerr << num << " Worker update called, checking time... ms run " << startTimestamp->msecsTo(QDateTime::currentDateTimeUtc()) << " thread " << QThread::currentThread()->objectName().toStdString() << "\n";
-    std::cerr << "    start time " << startTimestamp->toString().toStdString() << '\n';
+    //std::cerr << num << " Worker update called, checking time... ms run " << startTimestamp->msecsTo(QDateTime::currentDateTimeUtc()) << " thread " << QThread::currentThread()->objectName().toStdString() << "\n";
     if (startTimestamp->msecsTo(QDateTime::currentDateTimeUtc()) < msPerMove)
         return;
     engine->deactivate();

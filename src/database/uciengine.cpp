@@ -201,7 +201,7 @@ void UCIEngine::setPosition()
 
 void UCIEngine::processMessage(const QString& message)
 {
-    //std::cerr << num << " UCIEngine::processMessage " << message.toStdString() << '\n';
+    std::cerr << num << " UCIEngine::processMessage " << message.toStdString() << '\n';
     if(message == "uciok")
     {
         //once the engine is running wait for it to initialise

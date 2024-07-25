@@ -209,14 +209,14 @@ void EngineX::setActive(bool active)
 {
     if(active && !m_active)
     {
-        std::cerr << "EngineX::setActive emitting activated; this is " << this << "\n";
+        //std::cerr << "EngineX::setActive emitting activated; this is " << this << "\n";
         m_active = true;
         emit activated();
-        std::cerr << "EngineX::setActive emmitttteeddd activated\n";
+        //std::cerr << "EngineX::setActive emmitttteeddd activated\n";
     }
     else
     {
-        std::cerr << "EngineX::setActive NOT emitting activated\n";
+        //std::cerr << "EngineX::setActive NOT emitting activated\n";
         if(!active && m_active)
         {
             setAnalyzing(false);
@@ -337,7 +337,7 @@ void EngineX::setAllowEngineOutput(bool allow)
 
 void EngineX::processExited()
 {
-    std::cerr << "Enginx::processExited\n";
+    //std::cerr << "Enginx::processExited\n";
     setActive(false);
     m_process = nullptr;
     emit deactivated();
