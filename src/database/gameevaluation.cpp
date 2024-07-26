@@ -143,7 +143,7 @@ GameEvaluationWorker::~GameEvaluationWorker() noexcept
     {
         std::cerr << "~GameEvalutaionworker; " << moveNumber << " engine is " << engine << '\n';
         std::cerr << "    stopping analysis...\n";
-        engine->stopAnalysis();
+        engine->deactivate();
         std::cerr << "    deleting engine\n";
         delete engine;
     }
@@ -194,11 +194,31 @@ void GameEvaluationWorker::engineAnalysisUpdated(Analysis const & analysis)
         // When the engine reports a best move, no score is reported, so we skip it
         return;
     }
-    lastScore = analysis.fscore();
+    if (analysis.isMate())
+    {
+        lastScore = static_cast<double>(10);
+        if (std::signbit(analysis.score()))
+            lastScore *= -1;
+        // If it's black's turn and black is winning, analysis.score() returns a
+        // positive number in a "mating" condition. We need a score from white's
+        // perspective.
+        bool blacksTurn {static_cast<bool>(analysis.variation().size() % 2)};
+        if (!blacksTurn)
+            lastScore *= -1;
+    }
+    else
+    {
+        lastScore = analysis.fscore();
+    }
+    if (analysis.getBookMove())
+    {
+        std::cerr << "BOOK MOVE!\n";
+        engine->deactivate();
+    }
     //lastScore = static_cast<double>(moveNumber % 2 ? -1 : 1);
-    //std::cerr << moveNumber << " EVENT: analysis updated. move " << move << " score " << lastScore << " bestmove " <<
-        //analysis.bestMove() <<" depth " << analysis.depth() << "\n";
-    std::cerr << moveNumber << " EVENT: analysis updated. score " << lastScore << '\n';
+    std::cerr << moveNumber << " EVENT: analysis updated. move " << move << " book move " << analysis.getBookMove() << " score "
+        << lastScore << " ismate " << analysis.isMate() << " mate in " << analysis.movesToMate() << "\n";
+    //std::cerr << moveNumber << " EVENT: analysis updated: " << analysis.toString(currentPosition).toStdString() << '\n';
 }
 
 void GameEvaluationWorker::engineLogUpdated()
