@@ -38,7 +38,7 @@ ChartWidget::~ChartWidget()
 
 void ChartWidget::setValues(int line, const QList<double>& values)
 {
-    //std::cout << "ChartWidget::setValues " << line << " " << values.size() << "\n";
+    std::cout << "ChartWidget::setValues line " << line << " " << values.size() << " values\n";
     if (line >= m_values.size())
     {
         QList<double> l;

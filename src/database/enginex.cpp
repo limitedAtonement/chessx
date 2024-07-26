@@ -137,7 +137,7 @@ EngineX::~EngineX()
 
 void EngineX::activate()
 {
-    std::cerr << "activating engine... engine " << this << "\n";
+    //std::cerr << "activating engine... engine " << this << "\n";
     if(m_process)
     {
         return;
@@ -146,7 +146,7 @@ void EngineX::activate()
     m_process = new QProcess(this);
     if(m_process)
     {
-        std::cerr <<"   created new process\n";
+        //std::cerr <<"   created new process\n";
         m_process->setReadChannel(QProcess::StandardOutput);
         if(!m_directory.isEmpty())
         {
@@ -165,7 +165,7 @@ void EngineX::activate()
         parameters.pop_front();
         m_process->start(cmd, parameters);
     }
-    std::cerr << "finished activating engine... engine " << this << "\n";
+    //std::cerr << "finished activating engine... engine " << this << "\n";
 }
 
 void EngineX::deactivate()
@@ -271,7 +271,7 @@ void EngineX::setMoveTime(const EngineParameter& mt)
 void EngineX::pollProcess()
 {
     QString message;
-    std::cerr << "Enginx::pollProcess... engine " << this << "\n";
+    //std::cerr << "Enginx::pollProcess... engine " << this << "\n";
     while(m_process && m_process->canReadLine())
     {
         message = m_process->readLine().simplified();
@@ -281,7 +281,7 @@ void EngineX::pollProcess()
         }
         processMessage(message);
     }
-    std::cerr << "Enginx::pollProcess finished\n";
+    //std::cerr << "Enginx::pollProcess finished\n";
 }
 
 void EngineX::processError(QProcess::ProcessError errMsg)

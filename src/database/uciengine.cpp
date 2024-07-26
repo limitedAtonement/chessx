@@ -38,7 +38,7 @@ void UCIEngine::setStartPos(const BoardX& startPos)
 
 bool UCIEngine::startAnalysis(const BoardX& board, int nv, const EngineParameter &mt, bool bNewGame, QString line)
 {
-    std::cerr << num << " uciengine starting analysis\n";
+    //std::cerr << num << " uciengine starting analysis\n";
     EngineX::setMoveTime(mt);
     m_mpv = nv;
     if(!isActive())
@@ -125,7 +125,7 @@ void UCIEngine::setMoveTime(const EngineParameter &mt)
 
 void UCIEngine::protocolStart()
 {
-    std::cerr << num << " UCIEngine::protocolStart\n";
+    //std::cerr << num << " UCIEngine::protocolStart\n";
     //tell the engine we are using the uci protocol
     send("uci");
 }
@@ -201,7 +201,7 @@ void UCIEngine::setPosition()
 
 void UCIEngine::processMessage(const QString& message)
 {
-    std::cerr << num << " UCIEngine::processMessage " << message.toStdString() << '\n';
+    //std::cerr << num << " UCIEngine::processMessage " << message.toStdString() << '\n';
     if(message == "uciok")
     {
         //once the engine is running wait for it to initialise
@@ -222,10 +222,10 @@ void UCIEngine::processMessage(const QString& message)
     }
     if(message == "readyok")
     {
-        std::cerr << num << "    readyok received\n";
+        //std::cerr << num << "    readyok received\n";
         if(m_waitingOn == "uciok")
         {
-            std::cerr << num << "       waiting on uciok, setting active! test mode " << m_bTestMode << "\n";
+            //std::cerr << num << "       waiting on uciok, setting active! test mode " << m_bTestMode << "\n";
             //engine is now initialised and ready to go
             m_waitingOn = "";
             setActive(true);

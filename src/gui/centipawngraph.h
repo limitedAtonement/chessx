@@ -18,7 +18,6 @@ class CentipawnGraph final : public QWidget
 public:
     CentipawnGraph(QWidget* parent = nullptr);
     void startAnalysis(GameX const &) noexcept;
-    ~CentipawnGraph() noexcept;
 
 signals:
     void requestPly(int);
@@ -41,7 +40,7 @@ private:
     QLCDNumber* m_clock2;
     ChartWidget* m_chart;
     QPushButton* m_startAnalysis;
-    GameEvaluation * evaluation;
+    std::unique_ptr<GameEvaluation> evaluation;
     GameX currentGame;
     QList<double> scores;
 

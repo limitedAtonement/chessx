@@ -23,7 +23,7 @@ CentipawnGraph::CentipawnGraph(QWidget* parent)
     QGridLayout * layout = new QGridLayout(this);
     m_startAnalysis = new QPushButton{"Start"};
     m_startAnalysis->setDefault(true);
-    connect(m_startAnalysis, &QAbstractButton::clicked, this, &CentipawnGraph::analysisRequested);
+    connect(m_startAnalysis, &QPushButton::clicked, this, &CentipawnGraph::analysisRequested);
     layout->addWidget(m_startAnalysis, 0, 0);
 
     m_clock1 = new QLCDNumber(7);
@@ -143,13 +143,15 @@ void CentipawnGraph::startAnalysis(GameX const & game) noexcept
             std::cout << "Already have evaluation, returning\n";
             return;
         }
-        evaluation = new GameEvaluation{0, 1000, game};
-        connect(evaluation, &GameEvaluation::evaluationChanged, this, &CentipawnGraph::evaluationChanged);
-        connect(evaluation, &GameEvaluation::evaluationComplete, this, &CentipawnGraph::evaluationComplete);
+        evaluation = std::make_unique<GameEvaluation>(0, 1000, game);
+        connect(evaluation.get(), &GameEvaluation::evaluationChanged, this, &CentipawnGraph::evaluationChanged);
+        connect(evaluation.get(), &GameEvaluation::evaluationComplete, this, &CentipawnGraph::evaluationComplete);
         currentGame = game;
         scores.clear();
-        scores.reserve(currentGame.cursor().countMoves());
-        for (int i{0}; i < currentGame.cursor().countMoves(); ++i)
+        std::cout << "centipawn starting analysis with " << currentGame.cursor().countMoves() << '\n';
+        std::cout << "    expecting " << currentGame.cursor().countMoves() + 1 << " evalutaions!\n";
+        scores.reserve(currentGame.cursor().countMoves()+1);
+        for (int i{0}; i < currentGame.cursor().countMoves()+1; ++i)
             scores << 0;
         evaluation->start();
     }
@@ -160,27 +162,20 @@ void CentipawnGraph::startAnalysis(GameX const & game) noexcept
     }
 }
 
-CentipawnGraph::~CentipawnGraph() noexcept
-{
-    if (evaluation)
-        delete evaluation;
-}
-
 void CentipawnGraph::evaluationComplete() noexcept
 {
-    delete evaluation;
     evaluation = nullptr;
 }
 
-void CentipawnGraph::evaluationChanged(std::unordered_map<MoveId, double> const & scoreUpdates) noexcept
+void CentipawnGraph::evaluationChanged(std::unordered_map<int, double> const & scoreUpdates) noexcept
 {
     GameX tempGame{currentGame};
     tempGame.moveToStart();
     std::cout << "got " << scoreUpdates.size() << " score updates...";
-    for (std::pair<MoveId, double> const & score : scoreUpdates)
+    for (std::pair<int, double> const & score : scoreUpdates)
     {
-        int moveNumber = currentGame.moveNumber(score.first);
-        //std::cout << moveNumber << ":" << score.second << ";";
+        int moveNumber = score.first;
+        std::cout << moveNumber << "(" << score.first << "):" << score.second << ";";
         if (scores.size() <= moveNumber)
         {
             std::cout << "OUT OF RANGE\n";
