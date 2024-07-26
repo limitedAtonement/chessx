@@ -1329,16 +1329,6 @@ void MainWindow::moveChanged()
 
     auto timeThis = g.timeAnnotation(m, GameX::BeforeMove);
     auto timeThat = g.timeAnnotation(m, GameX::AfterMove);
-    if (g.board().toMove() == White)
-    {
-        m_centipawnGraph->slotDisplayTime(White, timeThis);
-        m_centipawnGraph->slotDisplayTime(Black, timeThat);
-    }
-    else
-    {
-        m_centipawnGraph->slotDisplayTime(Black, timeThis);
-        m_centipawnGraph->slotDisplayTime(White, timeThat);
-    }
 
     // Highlight current move
     m_gameView->showMove(m);

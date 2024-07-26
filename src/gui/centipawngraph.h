@@ -27,17 +27,10 @@ public slots:
     void slotDisplayCurrentPly(int ply);
     void slotDisplayMaterial(const QList<double>& material);
     void slotDisplayEvaluations(const QList<double>& evaluations);
-    void slotDisplayTime(const QString& timeWhite, const QString& timeBlack);
-    void slotDisplayTime(Color color, const QString& time);
     void evaluationChanged(std::unordered_map<MoveId, double> const &) noexcept;
     void evaluationComplete() noexcept;
 
-protected:
-    QSize sizeHint() const override;
-
 private:
-    QLCDNumber* m_clock1;
-    QLCDNumber* m_clock2;
     ChartWidget* m_chart;
     QPushButton* m_startAnalysis;
     std::unique_ptr<GameEvaluation> evaluation;
