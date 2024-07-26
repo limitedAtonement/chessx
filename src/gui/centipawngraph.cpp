@@ -119,7 +119,8 @@ void CentipawnGraph::evaluationChanged(std::unordered_map<int, double> const & s
             std::cout << "OUT OF RANGE\n";
             continue;
         }
-        scores.replace(moveNumber, score.second);
+        double newScore {std::clamp(score.second, -10.0, 10.0)};
+        scores.replace(moveNumber, newScore);
     }
     std::cout << "\nnew scores:";
     std::cout.setf(std::ios::fixed);
