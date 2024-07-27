@@ -5,37 +5,63 @@
 #include <iostream>
 #include <QPainter>
 #include <QPushButton>
+#include <QComboBox>
 
 #include "chartwidget.h"
 #include "gameevaluation.h"
 
 CentipawnGraph::CentipawnGraph(QWidget* parent)
     : QWidget(parent)
-    , m_chart(nullptr)
-    , m_startAnalysis{nullptr}
     , evaluation{nullptr}
 {
+    std::cout << "centipawn graph constructor.\n";
     setObjectName("CentipawnGraph");
     QGridLayout * layout = new QGridLayout(this);
-    m_startAnalysis = new QPushButton{"Start"};
+    m_startAnalysis = new QPushButton{"Start Analysis"};
     m_startAnalysis->setDefault(true);
     connect(m_startAnalysis, &QPushButton::clicked, this, &CentipawnGraph::analysisRequested);
-    layout->addWidget(m_startAnalysis, 0, 0);
+    m_engineList = new QComboBox;
+    setupEngineList();
+    layout->addWidget(m_startAnalysis, /*row*/0, 0);
+    layout->addWidget(m_engineList, 0, 1);
     m_chart = new ChartWidget();
     m_chart->setObjectName("ChartWidget");
     m_chart->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    layout->addWidget(m_chart, 1, 0);
+    layout->addWidget(m_chart, 1, 0, 1, 2);
     m_chart->show();
     connect(m_chart, &ChartWidget::halfMoveRequested, this, &CentipawnGraph::requestPly);
-    //std::cout << "CentipawnGraph Constructor connected\n";
     adjustSize();
 }
 
-static void printDimensions(QRect const & /*re*/)
+void CentipawnGraph::setupEngineList() noexcept
 {
-    //std::cout << "  left " << re.left() << " top " << re.top() << " right " << re.right() << " bottom " << re.bottom() << '\n';
+    std::cout << "Reading engine list...\n";
+    m_engineList->clear();
+    EngineList enginesList;
+    enginesList.restore();
+    QStringList names = enginesList.names();
+    std::cout << "   got " << names.size() << " engines\n";
+    m_engineList->setEditable(false);
+    if (!names.size())
+    {
+        m_engineList->addItem("No Engines Configured");
+        m_engineList->setEnabled(false);
+        m_startAnalysis->setEnabled(false);
+    }
+    else
+    {
+        m_engineList->addItems(names);
+        m_engineList->setEnabled(true);
+        m_startAnalysis->setEnabled(true);
+        m_engineList->setToolTip("Select a pre-configured engine");
+    }
 }
+
+//static void printDimensions(QRect const & /*re*/)
+//{
+    //std::cout << "  left " << re.left() << " top " << re.top() << " right " << re.right() << " bottom " << re.bottom() << '\n';
+//}
 
 void CentipawnGraph::slotDisplayCurrentPly(int ply)
 {
@@ -81,7 +107,9 @@ void CentipawnGraph::startAnalysis(GameX const & game) noexcept
             std::cout << "Already have evaluation, returning\n";
             return;
         }
-        evaluation = std::make_unique<GameEvaluation>(0, 1000, game);
+        m_startAnalysis->setEnabled(false);
+        m_engineList->setEnabled(false);
+        evaluation = std::make_unique<GameEvaluation>(m_engineList->currentIndex(), 1000, game);
         connect(evaluation.get(), &GameEvaluation::evaluationChanged, this, &CentipawnGraph::evaluationChanged);
         connect(evaluation.get(), &GameEvaluation::evaluationComplete, this, &CentipawnGraph::evaluationComplete);
         currentGame = game;
@@ -103,6 +131,8 @@ void CentipawnGraph::startAnalysis(GameX const & game) noexcept
 void CentipawnGraph::evaluationComplete() noexcept
 {
     evaluation = nullptr;
+    m_startAnalysis->setEnabled(true);
+    m_engineList->setEnabled(true);
 }
 
 void CentipawnGraph::evaluationChanged(std::unordered_map<int, double> const & scoreUpdates) noexcept
@@ -132,4 +162,3 @@ void CentipawnGraph::evaluationChanged(std::unordered_map<int, double> const & s
     std::cout << '\n';
     m_chart->setValues(1, scores);
 }
-

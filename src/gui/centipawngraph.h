@@ -7,9 +7,9 @@
 #include "gamex.h"
 #include "gameevaluation.h"
 
-class QLCDNumber;
 class ChartWidget;
 class QPushButton;
+class QComboBox;
 
 class CentipawnGraph final : public QWidget
 {
@@ -31,11 +31,14 @@ public slots:
     void evaluationComplete() noexcept;
 
 private:
-    ChartWidget* m_chart;
-    QPushButton* m_startAnalysis;
+    ChartWidget* m_chart {nullptr};
+    QPushButton* m_startAnalysis {nullptr};
+    QComboBox* m_engineList {nullptr};
     std::unique_ptr<GameEvaluation> evaluation;
     GameX currentGame;
     QList<double> scores;
+
+    void setupEngineList() noexcept;
 
 private slots:
     void analysisRequested(bool) noexcept;
