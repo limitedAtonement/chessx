@@ -189,7 +189,7 @@ MainWindow::MainWindow() : QMainWindow(),
     connect(this, SIGNAL(reconfigure()), m_ficsConsole, SLOT(slotReconfigure()));
     m_ficsConsole->setEnabled(false);
 
-    DockWidgetEx* gameTimeDock = new DockWidgetEx(tr("Game Timeddd"), this);
+    DockWidgetEx* gameTimeDock = new DockWidgetEx(tr("Centipawn Loss Graph"), this);
     gameTimeDock->setObjectName("GameTimeDock");
     gameTimeDock->toggleViewAction()->setShortcut(Qt::CTRL | Qt::Key_W);
     m_menuView->addAction(gameTimeDock->toggleViewAction());
